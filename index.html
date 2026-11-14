@@ -26,12 +26,9 @@
   <!-- 1 -->
   <section id="s1" class="card">
     <h2><span class="num">1</span> Dati di progetto</h2>
-    <p class="hint">Copiate i dati dalla vostra scheda. Strati dall'interno verso l'esterno, spessori in millimetri. Usate la virgola o il punto per i decimali.</p>
-    <div class="grid">
-      <fieldset>
-        <legend>Progettista</legend>
-        <label>Nome progettista <input id="gNomi" type="text" placeholder="Nome Cognome (o nomi del gruppo)"></label>
-      </fieldset>
+    <p class="hint">Copiate i dati dalla vostra scheda. Strati dall'interno verso l'esterno, spessori in metri (sulla scheda sono in millimetri: convertiteli). Usate la virgola o il punto per i decimali.</p>
+    <label class="wide">Nome e cognome del progettista <input id="gNomi" type="text" placeholder="Nome Cognome (o nomi dei componenti del gruppo)"></label>
+    <div class="grid3">
       <fieldset>
         <legend>Clima e condizioni di progetto</legend>
         <label>Località <input id="dLoc" type="text"></label>
@@ -56,17 +53,13 @@
         <label>Altezza h [m] <input id="dH" class="num"></label>
         <div id="svgSchizzo" class="figure"></div>
       </fieldset>
-    </div>
-    <div class="two">
-      <div>
-        <h3>Finestre e porte per parete</h3>
+      <fieldset>
+        <legend>Finestre e porte per parete</legend>
         <div id="finestre"></div>
-      </div>
-      <div>
-        <h3>La vostra pianta (deve corrispondere al disegno della scheda)</h3>
-        <div id="svgPianta" class="figure"></div>
-      </div>
+      </fieldset>
     </div>
+    <h3>La vostra pianta (deve corrispondere al disegno della scheda)</h3>
+    <div id="svgPianta" class="figure pianta"></div>
     <h3>Stratigrafia iniziale (dall'interno)</h3>
     <div id="strati"></div>
     <button id="addStrato" class="ghost small">+ strato</button>

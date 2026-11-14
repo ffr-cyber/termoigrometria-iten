@@ -7,7 +7,7 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&
 
 // ---------------- stato ----------------
 const NUOVO = () => ({
-  v: 2, step: 1, pagina: 1,
+  v: 3, step: 1, pagina: 1,
   gruppo: {nomi: ""},
   dati: {loc: "", zona: "", ti: "", te: "", fi: "", fe: "", budget: "", tipo: "R", A: "", B: "", a: "", b: "", h: "", fin: {}, strati: [{id: "", s: ""}, {id: "", s: ""}, {id: "", s: ""}]},
   s1: {ok: false},
@@ -31,7 +31,7 @@ const D = () => {
 };
 const stratiIniziali = () => S.dati.strati.filter(r => MURATURE.some(x => x.id === r.id)).map(r => {
   const m = MURATURE.find(x => x.id === r.id);
-  return {nome: m.nome, s: num(r.s) / 1000, lambda: m.lambda, pi: m.pi, tipo: m.id};
+  return {nome: m.nome, s: num(r.s), lambda: m.lambda, pi: m.pi, tipo: m.id};
 });
 const nomeFile = () => (S.gruppo.nomi || "progetto").trim().replace(/[^A-Za-z0-9À-ú]+/g, "_").slice(0, 40);
 const stratiIsolati = sc => Calc.isolata(stratiIniziali(), sc || S.s3.sc);
@@ -94,7 +94,7 @@ function renderFinestre() {
 function renderStrati() {
   $("strati").innerHTML = S.dati.strati.map((r, i) => `<div class="strato"><b>${i + 1}</b>
     <select data-mat="${i}"><option value="" ${r.id ? "" : "selected"}>— nessun materiale —</option>${MURATURE.map(m => `<option value="${m.id}" ${m.id === r.id ? "selected" : ""}>${m.nome}</option>`).join("")}</select>
-    <label style="margin:0">s [mm]<input class="num" data-s="${i}" value="${esc(r.s)}"></label>
+    <label style="margin:0">s [m]<input class="num" data-s="${i}" value="${esc(r.s)}"></label>
     <button class="x" data-dels="${i}" title="Elimina">✕</button></div>`).join("");
   $("strati").querySelectorAll("[data-mat]").forEach(el => el.onchange = () => { S.dati.strati[+el.dataset.mat].id = el.value; disegnaStratoIniz(); salvaLocale(); });
   $("strati").querySelectorAll("[data-s]").forEach(el => el.oninput = () => { S.dati.strati[+el.dataset.s].s = el.value; disegnaStratoIniz(); salvaLocale(); });
@@ -114,6 +114,7 @@ function validaS1() {
   if (!(d.fi > 0 && d.fi < 100 && d.fe > 0 && d.fe <= 100)) err.push("umidità relative tra 0 e 100");
   if (!S.dati.strati.length || S.dati.strati.some(r => !r.id)) err.push("materiale di ogni strato (togliete le righe vuote)");
   if (S.dati.strati.some(r => !(num(r.s) > 0))) err.push("spessori degli strati");
+  if (S.dati.strati.some(r => num(r.s) > 1)) err.push("spessori in metri (uno strato supera 1 m: avete convertito i millimetri?)");
   for (const arr of Object.values(d.fin)) for (const f of arr) if (!(f.w > 0 && f.h > 0)) err.push("misure di finestre e porte");
   return [...new Set(err)];
 }
@@ -623,7 +624,7 @@ function scaricaJSON() {
 }
 function caricaJSON(file) {
   const rd = new FileReader();
-  rd.onload = () => { try { const o = JSON.parse(rd.result); if (o.v !== 2) throw 0; S = Object.assign(NUOVO(), o); renderTutto(); } catch (e) { alert("File non valido."); } };
+  rd.onload = () => { try { const o = JSON.parse(rd.result); if (o.v !== 3) throw 0; S = Object.assign(NUOVO(), o); renderTutto(); } catch (e) { alert("File non valido."); } };
   rd.readAsText(file);
 }
 function renderTutto() {
@@ -649,5 +650,5 @@ $("btnS5").onclick = inviaS5; $("btnS6").onclick = generaRelazione;
 $("btnSalva").onclick = scaricaJSON;
 $("btnNuovo").onclick = () => { if (confirm("Cancellare il lavoro presente in questo browser e iniziare un nuovo progetto? Salvate prima il progresso se vi serve.")) { try { localStorage.removeItem("termoigro"); } catch (e) {} location.reload(); } };
 $("fileCarica").onchange = e => e.target.files[0] && caricaJSON(e.target.files[0]);
-try { const o = JSON.parse(localStorage.getItem("termoigro")); if (o && o.v === 2) S = Object.assign(NUOVO(), o); } catch (e) {}
+try { const o = JSON.parse(localStorage.getItem("termoigro")); if (o && o.v === 3) S = Object.assign(NUOVO(), o); } catch (e) {}
 renderTutto();

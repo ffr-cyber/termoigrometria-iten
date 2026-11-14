@@ -98,3 +98,9 @@ svg .layer:hover { opacity: .8; cursor: pointer; }
   #relazione h2 { break-after: avoid; } #relazione svg, #relazione table { break-inside: avoid; }
 }
 .filebtn { display: inline-flex; align-items: center; margin: 0; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,.5); cursor: pointer; font-size: 15px; color: #fff; }
+
+.wide { display: block; max-width: 520px; margin: 0 0 14px; font-weight: 600; color: var(--ink); }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .grid3 { grid-template-columns: 1fr; } }
+.grid3 .wall .fin { grid-template-columns: 1fr 1fr auto auto; }
+.figure.pianta { max-width: 620px; margin: 0 auto; }
