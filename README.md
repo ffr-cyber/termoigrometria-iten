@@ -4,7 +4,8 @@ Sito statico per il lavoro a gruppi della 4ª ITT Energia: dati di progetto, ver
 
 - Nessun server: tutti i calcoli avvengono nel browser; il sito contiene solo il database dei materiali (`data.js`).
 - Il lavoro si salva nel browser e con il pulsante **Salva progresso** (.json); **Carica progresso** lo riprende su un altro PC. **Nuovo progetto** svuota il browser (da usare sui PC condivisi).
-- I codici di sblocco della sezione 2 non sono nel sorgente: c'è solo la loro impronta SHA-256.
+- I codici di sblocco della sezione 2 non sono nel sorgente: c'è solo la loro impronta SHA-256; ognuno dei codici del docente sblocca qualunque progetto.
+- Spessori degli strati in millimetri (nell'Excel esportato in metri).
 
 ## Fonti dei dati
 - λ, π, Rsi, Rse: manuale in uso in classe (Tab. 4.7, 4.13, 4.14, 5.2).

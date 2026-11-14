@@ -93,7 +93,7 @@ const Calc = {
   // Stratigrafia isolata dalla scelta
   isolata(iniziale, sc) {
     const iso = ISOLANTI.find(m => m.id === sc.iso);
-    const strIso = {nome: `${iso.nome} ${sc.sp} cm`, s: sc.sp / 100, lambda: iso.lambda, pi: iso.pi, fpsi: iso.fpsi, tipo: "iso"};
+    const strIso = {nome: `${iso.nome} ${sc.sp * 10} mm`, s: sc.sp / 100, lambda: iso.lambda, pi: iso.pi, fpsi: iso.fpsi, tipo: "iso"};
     if (sc.pos === "esterno") {
       const r = ACCESSORI.rasatura;
       return [...iniziale, strIso, {nome: r.nome, s: r.s, lambda: r.lambda, pi: r.pi, tipo: "acc"}];
@@ -111,7 +111,7 @@ const Calc = {
     const iso = ISOLANTI.find(m => m.id === sc.iso);
     const A = geo.An;
     const voci = [];
-    voci.push({voce: `${iso.nome} ${sc.sp} cm (materiale)`, q: A, u: "m²", pu: iso.costoCm * sc.sp});
+    voci.push({voce: `${iso.nome} ${sc.sp * 10} mm (materiale)`, q: A, u: "m²", pu: iso.costoCm * sc.sp});
     if (sc.pos === "esterno") {
       voci.push({voce: "Posa esterna a cappotto (collante, tasselli, rete, rasatura, finitura, manodopera)", q: A, u: "m²", pu: COSTI.posaEsterna});
       const Apont = geo.P * (h + 1);

@@ -26,12 +26,11 @@
   <!-- 1 -->
   <section id="s1" class="card">
     <h2><span class="num">1</span> Dati di progetto</h2>
-    <p class="hint">Copiate i dati dalla vostra scheda. Strati dall'interno verso l'esterno. Usate la virgola o il punto per i decimali.</p>
+    <p class="hint">Copiate i dati dalla vostra scheda. Strati dall'interno verso l'esterno, spessori in millimetri. Usate la virgola o il punto per i decimali.</p>
     <div class="grid">
       <fieldset>
-        <legend>Gruppo</legend>
-        <label>Numero del gruppo <select id="gNum"></select></label>
-        <label>Componenti <input id="gNomi" type="text" placeholder="Nome Cognome, Nome Cognome, …"></label>
+        <legend>Progettista</legend>
+        <label>Nome progettista <input id="gNomi" type="text" placeholder="Nome Cognome (o nomi del gruppo)"></label>
       </fieldset>
       <fieldset>
         <legend>Clima e condizioni di progetto</legend>
@@ -55,6 +54,7 @@
           <label class="lu">b [m] <input id="db" class="num"></label>
         </div>
         <label>Altezza h [m] <input id="dH" class="num"></label>
+        <div id="svgSchizzo" class="figure"></div>
       </fieldset>
     </div>
     <div class="two">
@@ -63,7 +63,7 @@
         <div id="finestre"></div>
       </div>
       <div>
-        <h3>Pianta (nord in alto)</h3>
+        <h3>La vostra pianta (deve corrispondere al disegno della scheda)</h3>
         <div id="svgPianta" class="figure"></div>
       </div>
     </div>
@@ -112,7 +112,7 @@
           <legend>Scelta</legend>
           <label>Posizione dell'isolante <select id="iPos"><option value="interno">Interno (controparete in cartongesso)</option><option value="esterno">Esterno (cappotto)</option></select></label>
           <label>Isolante <select id="iIso"></select></label>
-          <label>Spessore [cm] <select id="iSp"></select></label>
+          <label>Spessore [mm] <select id="iSp"></select></label>
           <label id="lblFreno">Freno al vapore in PE <select id="iFreno"><option value="no">nessuno</option><option value="caldo">tra cartongesso e isolante</option><option value="freddo">tra isolante e muratura</option></select></label>
         </fieldset>
         <div id="alertPonteggio" class="notice warn hidden"></div>
