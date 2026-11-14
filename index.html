@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analisi termoigrometrica</title>
+<link rel="stylesheet" href="style.css">
+<script src="vendor/xlsx.full.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Analisi termoigrometrica di una parete</h1>
+    <p class="sub">Isolamento, preventivo e verifica di Glaser · ITT Energia</p>
+  </div>
+  <div class="saveload">
+    <button id="btnSalva" class="ghost">Salva progresso (.json)</button>
+    <button id="btnNuovo" class="ghost">Nuovo progetto</button>
+    <label class="ghost filebtn">Carica progresso<input type="file" id="fileCarica" accept=".json,application/json"></label>
+  </div>
+</header>
+
+<nav id="steps" class="steps"></nav>
+
+<main>
+  <!-- 1 -->
+  <section id="s1" class="card">
+    <h2><span class="num">1</span> Dati di progetto</h2>
+    <p class="hint">Copiate i dati dalla vostra scheda. Strati dall'interno verso l'esterno. Usate la virgola o il punto per i decimali.</p>
+    <div class="grid">
+      <fieldset>
+        <legend>Gruppo</legend>
+        <label>Numero del gruppo <select id="gNum"></select></label>
+        <label>Componenti <input id="gNomi" type="text" placeholder="Nome Cognome, Nome Cognome, …"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Clima e condizioni di progetto</legend>
+        <label>Località <input id="dLoc" type="text"></label>
+        <label>Zona climatica <select id="dZona"><option value="">—</option><option>D</option><option>E</option><option>F</option></select></label>
+        <div class="row4">
+          <label>t<sub>i</sub> [°C] <input id="dTi" class="num"></label>
+          <label>t<sub>e</sub> [°C] <input id="dTe" class="num"></label>
+          <label>φ<sub>i</sub> [%] <input id="dFi" class="num"></label>
+          <label>φ<sub>e</sub> [%] <input id="dFe" class="num"></label>
+        </div>
+        <label>Budget [€] <input id="dBudget" class="num"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Pianta</legend>
+        <label>Tipo <select id="dTipo"><option value="R">Rettangolare</option><option value="L">A L (rientranza a nord-est)</option><option value="U">A U (cortile a nord)</option></select></label>
+        <div class="row4">
+          <label>A [m] <input id="dA" class="num"></label>
+          <label>B [m] <input id="dB" class="num"></label>
+          <label class="lu">a [m] <input id="da" class="num"></label>
+          <label class="lu">b [m] <input id="db" class="num"></label>
+        </div>
+        <label>Altezza h [m] <input id="dH" class="num"></label>
+      </fieldset>
+    </div>
+    <div class="two">
+      <div>
+        <h3>Finestre e porte per parete</h3>
+        <div id="finestre"></div>
+      </div>
+      <div>
+        <h3>Pianta (nord in alto)</h3>
+        <div id="svgPianta" class="figure"></div>
+      </div>
+    </div>
+    <h3>Stratigrafia iniziale (dall'interno)</h3>
+    <div id="strati"></div>
+    <button id="addStrato" class="ghost small">+ strato</button>
+    <div id="svgStratoIniz" class="figure"></div>
+    <div class="actions"><span id="s1msg" class="msg"></span><button id="btnS1" class="primary">Conferma i dati di progetto</button></div>
+  </section>
+
+  <!-- 2 -->
+  <section id="s2" class="card locked">
+    <h2><span class="num">2</span> Verifica dei calcoli in Excel</h2>
+    <p class="hint">Calcolate in Excel e inserite i risultati. Il sito vi dice quali valori sono giusti (tolleranza ±2 %) ma non il valore corretto. Dopo 5 invii con errori serve il codice del docente.</p>
+    <div class="two">
+      <div>
+        <h3>Dati dei materiali</h3>
+        <div id="tabMateriali"></div>
+      </div>
+      <div>
+        <h3>I vostri risultati</h3>
+        <div class="verify">
+          <label>Area lorda delle pareti [m²] <input id="vAg" class="num"><span class="ck" id="ckAg"></span></label>
+          <label>Area di finestre e porte [m²] <input id="vAf" class="num"><span class="ck" id="ckAf"></span></label>
+          <label>Area netta disperdente [m²] <input id="vAn" class="num"><span class="ck" id="ckAn"></span></label>
+          <label>Trasmittanza U [W/(m²K)] <input id="vU" class="num"><span class="ck" id="ckU"></span></label>
+          <label>Potenza dispersa Φ [W] <input id="vPhi" class="num"><span class="ck" id="ckPhi"></span></label>
+        </div>
+        <div class="actions"><span id="s2msg" class="msg"></span><button id="btnS2" class="primary">Invia i risultati</button></div>
+        <div id="sblocco" class="hidden notice warn">
+          <p><strong>Sezione bloccata dopo 5 invii con errori.</strong> Chiedete il codice di sblocco al docente.</p>
+          <label>Codice <input id="codice" maxlength="6"></label> <button id="btnCodice" class="ghost">Sblocca</button>
+        </div>
+      </div>
+    </div>
+    <div id="s2esito" class="hidden"></div>
+  </section>
+
+  <!-- 3 -->
+  <section id="s3" class="card locked">
+    <h2><span class="num">3</span> Isolamento</h2>
+    <p class="hint">Una sola stratigrafia per tutte le pareti. Scegliete, poi premete <strong>Calcola</strong>: i risultati si aggiornano solo allora.</p>
+    <div class="two">
+      <div>
+        <fieldset>
+          <legend>Scelta</legend>
+          <label>Posizione dell'isolante <select id="iPos"><option value="interno">Interno (controparete in cartongesso)</option><option value="esterno">Esterno (cappotto)</option></select></label>
+          <label>Isolante <select id="iIso"></select></label>
+          <label>Spessore [cm] <select id="iSp"></select></label>
+          <label id="lblFreno">Freno al vapore in PE <select id="iFreno"><option value="no">nessuno</option><option value="caldo">tra cartongesso e isolante</option><option value="freddo">tra isolante e muratura</option></select></label>
+        </fieldset>
+        <div id="alertPonteggio" class="notice warn hidden"></div>
+        <h3>Catalogo</h3>
+        <div id="tabCatalogo"></div>
+      </div>
+      <div>
+        <div class="actions left"><button id="btnCalcola" class="primary">Calcola</button><span id="nCalcoli" class="msg"></span></div>
+        <div id="risultati3"></div>
+      </div>
+    </div>
+    <div class="actions"><span id="s3msg" class="msg"></span><button id="btnS3" class="primary" disabled>Conferma l'isolamento</button></div>
+  </section>
+
+  <!-- 4 -->
+  <section id="s4" class="card locked">
+    <h2><span class="num">4</span> Riepilogo ed export</h2>
+    <p class="hint">Scaricate il file Excel con i dati della parete isolata e fate la verifica di Glaser sul vostro foglio. Scaricate anche le immagini per la relazione.</p>
+    <div id="riepilogo4"></div>
+    <div class="actions left wrap">
+      <button id="btnXlsParete" class="primary">Scarica Excel della parete isolata</button>
+      <button id="btnPngPianta" class="ghost">PNG pianta</button>
+      <button id="btnPngStrato" class="ghost">PNG stratigrafia isolata</button>
+      <button id="btnS4" class="primary">Ho fatto il diagramma di Glaser: vai alla verifica</button>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="s5" class="card locked">
+    <h2><span class="num">5</span> Verifica di condensa</h2>
+    <p class="hint">Un solo tentativo. Guardate il vostro diagramma di Glaser.</p>
+    <div id="domanda5">
+      <p class="q">Nel vostro diagramma si forma condensa interstiziale?</p>
+      <div class="radio">
+        <label><input type="radio" name="cond" value="si"> Sì</label>
+        <label><input type="radio" name="cond" value="no"> No</label>
+      </div>
+      <p class="q" id="qStrato">Se sì: cliccate sulla stratigrafia lo strato in cui la retta di p<sub>v</sub> supera per la prima volta quella di p<sub>s</sub>.</p>
+      <div id="svgClick" class="figure"></div>
+      <p id="sceltaStrato" class="msg"></p>
+      <div class="actions"><button id="btnS5" class="primary">Invia la risposta (1 tentativo)</button></div>
+    </div>
+    <div id="soluzione5" class="hidden"></div>
+  </section>
+
+  <!-- 6 -->
+  <section id="s6" class="card locked">
+    <h2><span class="num">6</span> Domande e relazione</h2>
+    <p class="hint">Rispondete citando i vostri numeri. Le risposte entrano nella relazione.</p>
+    <div id="domande6"></div>
+    <div class="actions"><button id="btnS6" class="primary">Genera la relazione</button></div>
+    <div id="approf6" class="hidden"></div>
+  </section>
+</main>
+
+<div id="relazione" class="hidden"></div>
+<footer class="foot">Dati: manuale in uso (λ, π, Rsi, Rse), Prezzario Regione FVG 2025, DM 28/10/2025. Calcolo stazionario semplificato a scopo didattico.</footer>
+<script src="data.js"></script>
+<script src="calc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
