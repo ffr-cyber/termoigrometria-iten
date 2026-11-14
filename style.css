@@ -64,7 +64,7 @@ tr.hl td { background: #fff8e1; }
 .notice.good { background: var(--good-soft); border: 1px solid #a5d6a7; }
 .notice.bad { background: var(--bad-soft); border: 1px solid #ef9a9a; }
 .notice.info { background: var(--accent-soft); border: 1px solid #9fd0ca; }
-.bar { margin: 10px 0 14px; }
+.bar { margin: 10px 0 18px; }
 .bar .lbl { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
 .bar .track { position: relative; height: 18px; background: #e9eded; border-radius: 9px; overflow: visible; margin-top: 4px; }
 .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 9px; }
@@ -88,9 +88,9 @@ svg .layer:hover { opacity: .8; cursor: pointer; }
 /* relazione stampabile */
 #relazione { max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; }
 #relazione h1 { font-size: 22px; } #relazione h2 { font-size: 17px; margin-top: 22px; border-bottom: 2px solid var(--accent); }
-#relazione .figs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+#relazione .figs { display: block; }
 #relazione svg { max-width: 640px; margin: 8px auto; display: block; }
-#relazione .figs svg { max-width: 100%; }
+#relazione .figs svg { max-width: 520px; }
 #relazione .ans { white-space: pre-wrap; border-left: 3px solid var(--accent); padding: 4px 10px; background: #f7f9f9; }
 @media print {
   body.print-rel > *:not(#relazione) { display: none !important; }

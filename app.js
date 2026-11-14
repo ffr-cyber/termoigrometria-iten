@@ -1,4 +1,5 @@
 "use strict";
+let UID = 0;   // prefissi univoci per gradienti/pattern/marker SVG (evita id duplicati nella pagina)
 const $ = id => document.getElementById(id);
 const num = v => { if (v === undefined || v === null) return NaN; const s = String(v).trim().replace(",", "."); return s === "" ? NaN : Number(s); };
 const fmt = (x, d = 2) => (x === null || x === undefined || !isFinite(x)) ? "—" : x.toLocaleString("it-IT", {minimumFractionDigits: d, maximumFractionDigits: d});
@@ -129,7 +130,7 @@ function confermaS1() {
 // schizzo generico quotato della pianta (non in scala)
 function disegnaSchizzo() { $("svgSchizzo").innerHTML = svgSchizzo(S.dati.tipo); }
 function svgSchizzo(tipo) {
-  const x0 = 50, y0 = 40, W = 220, H = 150, a = 90, b = 60;
+  const mk = "q" + (++UID), x0 = 50, y0 = 40, W = 220, H = 150, a = 90, b = 60;
   let pts;
   if (tipo === "R") pts = [[0, 0], [W, 0], [W, H], [0, H]];
   else if (tipo === "L") pts = [[0, 0], [W - a, 0], [W - a, b], [W, b], [W, H], [0, H]];
@@ -137,18 +138,18 @@ function svgSchizzo(tipo) {
   const P = p => `${x0 + p[0]},${y0 + p[1]}`;
   const quota = (x1, y1, x2, y2, t, dx, dy) => {
     const X1 = x0 + x1 + dx, Y1 = y0 + y1 + dy, X2 = x0 + x2 + dx, Y2 = y0 + y2 + dy;
-    return `<line x1="${X1}" y1="${Y1}" x2="${X2}" y2="${Y2}" stroke="#b3261e" marker-start="url(#qa)" marker-end="url(#qa)"/>
+    return `<line x1="${X1}" y1="${Y1}" x2="${X2}" y2="${Y2}" stroke="#b3261e" marker-start="url(#${mk})" marker-end="url(#${mk})"/>
       <line x1="${x0 + x1}" y1="${y0 + y1}" x2="${X1}" y2="${Y1}" stroke="#b3261e" stroke-width=".6"/><line x1="${x0 + x2}" y1="${y0 + y2}" x2="${X2}" y2="${Y2}" stroke="#b3261e" stroke-width=".6"/>
       <text x="${(X1 + X2) / 2 + (dx ? (dx > 0 ? 8 : -8) : 0)}" y="${(Y1 + Y2) / 2 + (dy ? (dy > 0 ? 16 : -6) : 4)}" text-anchor="${dx > 0 ? "start" : dx < 0 ? "end" : "middle"}" font-size="15" font-weight="700" fill="#b3261e">${t}</text>`;
   };
   let q = quota(0, H, W, H, "A", 0, 28) + quota(0, 0, 0, H, "B", -26, 0);
   if (tipo === "L") q += quota(W - a, 0, W, 0, "a", 0, -22) + quota(W, 0, W, b, "b", 26, 0);
   if (tipo === "U") { const c = (W - a) / 2; q += quota(c, 0, c + a, 0, "a", 0, -22) + quota(c + a, 0, c + a, b, "b", 22, 0); }
-  return `<svg viewBox="0 0 330 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
-    <defs><marker id="qa" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 2L5 5L0 8" fill="none" stroke="#b3261e"/></marker></defs>
+  return `<svg viewBox="0 0 340 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+    <defs><marker id="${mk}" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 2L5 5L0 8" fill="none" stroke="#b3261e"/></marker></defs>
     <rect width="100%" height="100%" fill="#fff"/>
     <polygon points="${pts.map(P).join(" ")}" fill="#eef4f3" stroke="#1d2327" stroke-width="2.5"/>${q}
-    <g transform="translate(18,30)"><line x1="0" y1="14" x2="0" y2="-10" stroke="#1d2327" stroke-width="2"/><path d="M-5 -4 L0 -14 L5 -4z" fill="#1d2327"/><text x="0" y="28" text-anchor="middle" font-size="12">N</text></g>
+    <g transform="translate(318,170)"><line x1="0" y1="14" x2="0" y2="-10" stroke="#1d2327" stroke-width="2"/><path d="M-5 -4 L0 -14 L5 -4z" fill="#1d2327"/><text x="0" y="28" text-anchor="middle" font-size="12">N</text></g>
     <text x="10" y="244" font-size="11" fill="#5d6a72">Schema quotato (non in scala): inserite A, B${tipo === "R" ? "" : ", a, b"} e l'altezza h</text></svg>`;
 }
 
@@ -219,7 +220,7 @@ function svgStrato(L, o = {}) {
       <text x="${x + w[i] / 2}" y="${h0 + hh + 18}" text-anchor="middle" font-size="12" font-weight="700" fill="${sel ? "#b3261e" : "#1d2327"}">${i + 1}</text></g>`;
     x += w[i];
   });
-  const leg = L.map((l, i) => `<text x="${x0}" y="${h0 + hh + 46 + i * 17}" font-size="12" fill="#1d2327">${i + 1}. ${esc(l.nome)} — ${fmt(l.s * 1000, l.s < 0.001 ? 1 : 0)} mm</text>`).join("");
+  const leg = L.map((l, i) => `<text x="${x0}" y="${h0 + hh + 46 + i * 17}" font-size="12" fill="#1d2327">${i + 1}. ${esc(l.nome)} — ${fmt(l.s * 1000, Math.abs(l.s * 1000 - Math.round(l.s * 1000)) > 1e-6 ? 1 : 0)} mm</text>`).join("");
   const Hh = h0 + hh + 46 + L.length * 17;
   return `<svg viewBox="0 0 ${W} ${Hh}" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
     <rect width="100%" height="100%" fill="#fff"/>
@@ -325,11 +326,12 @@ function calcolaS3() {
   r.okU = r.U <= lim + 1e-9; r.okB = r.costo <= d.budget; r.ok = r.okU && r.okB;
   S.s3.ultimo = r; mostraRisultati3(r); salvaLocale();
 }
-function barra(titolo, val, max, segni, colore, testo) {
+function barra(titolo, val, max, segni, colore, testo, sx, dx, nota) {
   const p = v => Math.max(0, Math.min(100, v / max * 100));
-  return `<div class="bar"><div class="lbl"><span>${titolo}</span><span>${testo}</span></div><div class="track">
+  return `<div class="bar"><div class="lbl"><span><b>${titolo}</b></span><span>${testo}</span></div><div class="track">
     <div class="fill" style="width:${p(val)}%;background:${colore}"></div>
-    ${segni.map(s => `<div class="mark" style="left:${p(s.v)}%"></div><div class="marklbl" style="left:${p(s.v)}%">${s.t}</div>`).join("")}</div></div><div style="height:14px"></div>`;
+    ${segni.map(s => `<div class="mark" style="left:${p(s.v)}%"></div><div class="marklbl" style="left:${p(s.v)}%">${s.t}</div>`).join("")}</div>
+    <div class="lbl" style="margin-top:20px"><span>${sx}</span><span>${dx}</span></div><div class="msg">${nota}</div></div>`;
 }
 function mostraRisultati3(r) {
   const d = D();
@@ -338,8 +340,8 @@ function mostraRisultati3(r) {
     <div class="kpi"><div><span>U isolata</span><b>${fmt(r.U, 3)}</b><span>W/(m²K) · prima ${fmt(r.U0, 3)}</span></div>
     <div><span>Φ</span><b>${fmt(r.Phi, 0)} W</b><span>−${fmt((1 - r.Phi / r.Phi0) * 100, 0)} % rispetto a ${fmt(r.Phi0, 0)} W</span></div>
     <div><span>Costo</span><b>${eur(r.costo)}</b><span>budget ${eur(d.budget)}</span></div></div>
-    ${barra("Trasmittanza: da U iniziale verso il limite", r.U0 - r.U, r.U0, [{v: r.U0 - r.lim, t: "limite " + fmt(r.lim, 3)}], r.okU ? "#2e7d32" : "#f0a030", `U = ${fmt(r.U, 3)}`)}
-    ${barra("Budget usato", r.costo, Math.max(d.budget, r.costo) * 1.05, [{v: d.budget, t: "budget"}], r.okB ? "#0b6e69" : "#b3261e", `${fmt(r.costo / d.budget * 100, 0)} %`)}
+    ${barra("Trasmittanza U", r.U0 - r.U, r.U0, [{v: r.U0 - r.lim, t: "limite di legge " + fmt(r.lim, 3)}], r.okU ? "#2e7d32" : "#f0a030", `U = ${fmt(r.U, 3)} W/(m²K)`, `U iniziale ${fmt(r.U0, 3)}`, "U = 0", r.okU ? "La barra supera la tacca del limite: obiettivo raggiunto." : "La barra deve oltrepassare la tacca nera del limite di legge (U più bassa = barra più lunga).")}
+    ${barra("Budget", r.costo, Math.max(d.budget, r.costo) * 1.15, [{v: d.budget, t: "budget " + eur(d.budget)}], r.okB ? "#0b6e69" : "#b3261e", `spesa ${eur(r.costo)} (${fmt(r.costo / d.budget * 100, 0)} %)`, "0 €", "", r.okB ? "La spesa resta prima della tacca del budget." : "La spesa supera la tacca nera del budget disponibile.")}
     <table><tr><th>Voce</th><th class="r">Quantità</th><th class="r">€/u</th><th class="r">Totale</th></tr>
     ${r.voci.map(v => `<tr><td>${v.voce}</td><td class="r">${fmt(v.q, 2)} ${v.u}</td><td class="r">${fmt(v.pu, 2)}</td><td class="r">${eur(v.tot)}</td></tr>`).join("")}
     <tr><th colspan="3">Totale</th><th class="r">${eur(r.costo)}</th></tr></table>
@@ -381,12 +383,8 @@ function xlsParete() {
   rows.push(["Potenza dispersa Φ = U · A_netta · (t_e − t_i) [W]", "", "", "", "", {f: `IFERROR(F${rTot + 2}*B${rAn}*(H${rTe}-H${rTi}),"")`}]);
   rows.push([]);
   rows.push(["Note"]);
-  rows.push(["Pressione di saturazione, Excel in italiano (T = cella della temperatura):", "=SE(T>=0;610,5*EXP(17,269*T/(237,3+T));610,5*EXP(21,875*T/(265,5+T)))"]);
-  rows.push(["Pressione di saturazione, Excel in inglese:", "=IF(T>=0,610.5*EXP(17.269*T/(237.3+T)),610.5*EXP(21.875*T/(265.5+T)))"]);
+  rows.push(["Pressione di saturazione (T = cella della temperatura):", "=SE(T>=0;610,5*EXP(17,269*T/(237,3+T));610,5*EXP(21,875*T/(265,5+T)))"]);
   rows.push(["Pressione parziale: p_v,i = φ_i/100 · p_s(t_i); p_v,k = p_v,k−1 − R_v,k/R_v · (p_v,i − p_v,e)"]);
-  rows.push(["Grafico: righe da Rsi all'ultimo strato (esclusa Rse); asse x = s cumulato."]);
-  rows.push(["R_t, R_v, U, Π e Φ si calcolano da soli quando avete compilato le colonne R e R_v."]);
-  rows.push(["Dati: λ e π dal manuale (Tab. 4.7, 5.2) e dal Prezzario FVG 2025; Rsi e Rse Tab. 4.13."]);
   const wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet(rows.map(r => r.map(c => c && c.f ? null : c)));
   rows.forEach((r, i) => r.forEach((c, j) => { if (c && c.f) ws[XLSX.utils.encode_cell({r: i, c: j})] = {t: "n", f: c.f}; }));
   ws["!cols"] = [{wch: 52}, {wch: 10}, {wch: 14}, {wch: 12}, {wch: 20}, {wch: 12}, {wch: 16}, {wch: 9}, {wch: 8}];
@@ -542,9 +540,10 @@ function svgTermo() {
     const e = f.eventi.reduce((a, b) => b.acqua > a.acqua ? b : a);
     wet = `${fmt(f.acqua, 2)} kg/m² di acqua nella parete|≈ ${fmt(f.acqua * geo.An, 0)} litri su tutta la casa|strato ${e.strato + 1} bagnato: λ × ${fmt(e.fm, 2)}`;
   }
-  let s = pannelloTermo(L0, g0, 20, "Prima (parete iniziale)", `U = ${fmt(g0.U, 3)} W/(m²K)`, tmin, tmax, "a");
-  s += pannelloTermo(L1, f.g, 275, "Dopo l'isolamento", `U = ${fmt(f.g.U, 3)} W/(m²K)`, tmin, tmax, "b");
-  s += pannelloTermo(L2, f.g2, 530, "Dopo 30 giorni di freddo intenso", `U = ${fmt(f.g2.U, 3)} W/(m²K)${f.eventi.length ? ` (+${fmt((f.g2.U / f.g.U - 1) * 100, 0)} %)` : " (invariata)"}`, tmin, tmax, "c", f.eventi.length ? wet : "la parete resta asciutta");
+  const P = "t" + (++UID);
+  let s = pannelloTermo(L0, g0, 20, "Prima (parete iniziale)", `U = ${fmt(g0.U, 3)} W/(m²K)`, tmin, tmax, P + "a");
+  s += pannelloTermo(L1, f.g, 275, "Dopo l'isolamento", `U = ${fmt(f.g.U, 3)} W/(m²K)`, tmin, tmax, P + "b");
+  s += pannelloTermo(L2, f.g2, 530, "Dopo 30 giorni di freddo intenso", `U = ${fmt(f.g2.U, 3)} W/(m²K)${f.eventi.length ? ` (+${fmt((f.g2.U / f.g.U - 1) * 100, 0)} %)` : " (invariata)"}`, tmin, tmax, P + "c", f.eventi.length ? wet : "la parete resta asciutta");
   // scala colori
   let leg = ""; for (let i = 0; i <= 20; i++) { const t = tmin + (tmax - tmin) * i / 20; leg += `<rect x="${200 + i * 18}" y="420" width="18" height="12" fill="${tCol(t, tmin, tmax)}"/>`; }
   return `<svg viewBox="0 0 790 490" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif"><rect width="100%" height="100%" fill="#fff"/>${s}
