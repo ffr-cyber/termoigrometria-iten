@@ -7,19 +7,23 @@ const eur = x => fmt(x, 0) + " €";
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 
 // ---------------- stato ----------------
+const PROG_VUOTO = () => ({int: [], est: []});
 const NUOVO = () => ({
-  v: 3, step: 1, pagina: 1,
+  v: 4, pagina: 1,
   gruppo: {nomi: ""},
   dati: {loc: "", zona: "", ti: "", te: "", fi: "", fe: "", budget: "", tipo: "R", A: "", B: "", a: "", b: "", h: "", fin: {}, strati: [{id: "", s: ""}, {id: "", s: ""}, {id: "", s: ""}]},
   s1: {ok: false},
-  s2: {ok: false, invii: 0, inviiTot: 0, sblocchi: 0, valori: {}},
-  s3: {ok: false, calcoli: 0, sc: {pos: "interno", iso: "eps", sp: 6, freno: "no"}, ultimo: null},
+  s2: {ok: false, invii: 0, inviiTot: 0, valori: {}},
+  s3: {ok: false, calcoli: 0, prog: {int: [{t: "iso", m: "eps", sp: 6}], est: []}, ultimo: null},
   s4: {ok: false},
   s5: {ok: false, risposta: null, strato: null, esito: null},
-  s6: {risposte: [], fatto: false},
+  s6: {ok: false, prog: null, modifiche: 0},
+  s7: {risposte: [], fatto: false},
+  sblocchi: {},
 });
 let S = NUOVO();
 const salvaLocale = () => { try { localStorage.setItem("termoigro", JSON.stringify(S)); } catch (e) {} };
+const copia = o => JSON.parse(JSON.stringify(o));
 
 // ---------------- dati derivati ----------------
 const D = () => {
@@ -35,29 +39,42 @@ const stratiIniziali = () => S.dati.strati.filter(r => MURATURE.some(x => x.id =
   return {nome: m.nome, s: num(r.s), lambda: m.lambda, pi: m.pi, tipo: m.id};
 });
 const nomeFile = () => (S.gruppo.nomi || "progetto").trim().replace(/[^A-Za-z0-9À-ú]+/g, "_").slice(0, 40);
-const stratiIsolati = sc => Calc.isolata(stratiIniziali(), sc || S.s3.sc);
+const progV1 = () => (S.s3.ultimo ? S.s3.ultimo.prog : S.s3.prog);
+const stratiIsolati = () => Calc.costruisci(stratiIniziali(), progV1());          // versione 1 (sezione 3)
+const stratiFinali = () => Calc.costruisci(stratiIniziali(), S.s6.prog || progV1()); // progetto finale (sezione 6)
+const valuta = prog => { const d = D(); return Calc.valuta(stratiIniziali(), prog, d, Calc.geometria(d)); };
 
 // ---------------- navigazione ----------------
-const SEZ = ["Dati", "Verifica Excel", "Isolamento", "Riepilogo", "Condensa", "Relazione"];
+const SEZ = ["Dati", "Verifica Excel", "Isolamento", "Riepilogo", "Condensa", "Progetto", "Relazione"];
 function aggiornaSteps() {
-  const done = [S.s1.ok, S.s2.ok, S.s3.ok, S.s4.ok, S.s5.ok, S.s6.fatto];
-  let cur = done.findIndex(x => !x); if (cur < 0) cur = 5;
+  const done = [S.s1.ok, S.s2.ok, S.s3.ok, S.s4.ok, S.s5.ok, S.s6.ok, S.s7.fatto];
+  let cur = done.findIndex(x => !x); if (cur < 0) cur = 6;
   if (!(S.pagina >= 1 && S.pagina <= cur + 1)) S.pagina = cur + 1;
   $("steps").innerHTML = SEZ.map((n, i) => `<a href="#" data-pag="${i + 1}" class="${done[i] ? "done" : ""} ${i + 1 === S.pagina ? "cur" : ""} ${i > cur ? "lock" : ""}">${i + 1}. ${n}</a>`).join("");
   $("steps").querySelectorAll("[data-pag]").forEach(l => l.onclick = e => { e.preventDefault(); vai(+l.dataset.pag); });
-  for (let i = 1; i <= 6; i++) { $("s" + i).classList.toggle("locked", i - 1 > cur); $("s" + i).classList.toggle("hidden", i !== S.pagina); }
+  for (let i = 1; i <= 7; i++) { $("s" + i).classList.toggle("locked", i - 1 > cur); $("s" + i).classList.toggle("hidden", i !== S.pagina); }
+  renderSblocchi();
 }
 function vai(n) { S.pagina = n; aggiornaSteps(); salvaLocale(); window.scrollTo(0, 0); }
+
+// se i dati della sezione 1 cambiano dopo la conferma (prima della verifica), va riconfermata
+function modificaS1() {
+  if (S.s1.ok && !S.s2.ok) {
+    S.s1.ok = false; $("s1msg").className = "msg bad";
+    $("s1msg").textContent = "Avete modificato i dati: confermateli di nuovo prima della verifica.";
+    aggiornaSteps();
+  }
+}
 
 // ---------------- sezione 1 ----------------
 function initS1() {
   const bind = (id, path) => {
     const el = $(id);
-    el.addEventListener("input", () => { const [o, k] = path; S[o][k] = el.value; if (id === "dTipo" || ["dA", "dB", "da", "db", "dH"].includes(id)) { renderFinestre(); disegnaPianta(); } if (id === "dTipo") disegnaSchizzo(); salvaLocale(); });
+    el.addEventListener("input", () => { modificaS1(); const [o, k] = path; S[o][k] = el.value; if (id === "dTipo" || ["dA", "dB", "da", "db", "dH"].includes(id)) { renderFinestre(); disegnaPianta(); } if (id === "dTipo") disegnaSchizzo(); salvaLocale(); });
   };
   bind("gNomi", ["gruppo", "nomi"]);
   [["dLoc", "loc"], ["dZona", "zona"], ["dTi", "ti"], ["dTe", "te"], ["dFi", "fi"], ["dFe", "fe"], ["dBudget", "budget"], ["dTipo", "tipo"], ["dA", "A"], ["dB", "B"], ["da", "a"], ["db", "b"], ["dH", "h"]].forEach(([id, k]) => bind(id, ["dati", k]));
-  $("addStrato").onclick = () => { S.dati.strati.push({id: "", s: ""}); renderStrati(); };
+  $("addStrato").onclick = () => { modificaS1(); S.dati.strati.push({id: "", s: ""}); renderStrati(); };
   $("btnS1").onclick = confermaS1;
 }
 function riempiS1() {
@@ -84,11 +101,11 @@ function renderFinestre() {
       <label>alt. [m]<input class="num" data-h="${p.nome}|${i}" value="${esc(f.h)}"></label><span class="msg">${isFinite(num(f.w) * num(f.h)) ? fmt(num(f.w) * num(f.h), 2) + " m²" : ""}</span>
       <button class="x" data-del="${p.nome}|${i}" title="Elimina">✕</button></div>`).join("")}</div>`;
   }).join("");
-  $("finestre").querySelectorAll("[data-add]").forEach(b => b.onclick = () => { const k = b.dataset.add; (S.dati.fin[k] = S.dati.fin[k] || []).push({w: "", h: "", porta: b.dataset.porta === "1"}); renderFinestre(); });
-  $("finestre").querySelectorAll("[data-del]").forEach(b => b.onclick = () => { const [k, i] = b.dataset.del.split("|"); S.dati.fin[k].splice(+i, 1); renderFinestre(); disegnaPianta(); });
+  $("finestre").querySelectorAll("[data-add]").forEach(b => b.onclick = () => { const k = b.dataset.add; modificaS1(); (S.dati.fin[k] = S.dati.fin[k] || []).push({w: "", h: "", porta: b.dataset.porta === "1"}); renderFinestre(); });
+  $("finestre").querySelectorAll("[data-del]").forEach(b => b.onclick = () => { modificaS1(); const [k, i] = b.dataset.del.split("|"); S.dati.fin[k].splice(+i, 1); renderFinestre(); disegnaPianta(); });
   $("finestre").querySelectorAll("[data-w],[data-h]").forEach(inp => inp.oninput = () => {
     const key = inp.dataset.w ? "w" : "h"; const [k, i] = (inp.dataset.w || inp.dataset.h).split("|");
-    const f = S.dati.fin[k][+i]; f[key] = inp.value; salvaLocale(); disegnaPianta();
+    modificaS1(); const f = S.dati.fin[k][+i]; f[key] = inp.value; salvaLocale(); disegnaPianta();
     const a = num(f.w) * num(f.h); inp.closest(".fin").querySelector(".msg").textContent = isFinite(a) ? fmt(a, 2) + " m²" : "";
   });
 }
@@ -97,9 +114,9 @@ function renderStrati() {
     <select data-mat="${i}"><option value="" ${r.id ? "" : "selected"}>— nessun materiale —</option>${MURATURE.map(m => `<option value="${m.id}" ${m.id === r.id ? "selected" : ""}>${m.nome}</option>`).join("")}</select>
     <label style="margin:0">s [m]<input class="num" data-s="${i}" value="${esc(r.s)}"></label>
     <button class="x" data-dels="${i}" title="Elimina">✕</button></div>`).join("");
-  $("strati").querySelectorAll("[data-mat]").forEach(el => el.onchange = () => { S.dati.strati[+el.dataset.mat].id = el.value; disegnaStratoIniz(); salvaLocale(); });
-  $("strati").querySelectorAll("[data-s]").forEach(el => el.oninput = () => { S.dati.strati[+el.dataset.s].s = el.value; disegnaStratoIniz(); salvaLocale(); });
-  $("strati").querySelectorAll("[data-dels]").forEach(el => el.onclick = () => { S.dati.strati.splice(+el.dataset.dels, 1); renderStrati(); });
+  $("strati").querySelectorAll("[data-mat]").forEach(el => el.onchange = () => { modificaS1(); S.dati.strati[+el.dataset.mat].id = el.value; disegnaStratoIniz(); salvaLocale(); });
+  $("strati").querySelectorAll("[data-s]").forEach(el => el.oninput = () => { modificaS1(); S.dati.strati[+el.dataset.s].s = el.value; disegnaStratoIniz(); salvaLocale(); });
+  $("strati").querySelectorAll("[data-dels]").forEach(el => el.onclick = () => { modificaS1(); S.dati.strati.splice(+el.dataset.dels, 1); renderStrati(); });
   disegnaStratoIniz();
 }
 function disegnaStratoIniz() {
@@ -116,12 +133,14 @@ function validaS1() {
   if (!S.dati.strati.length || S.dati.strati.some(r => !r.id)) err.push("materiale di ogni strato (togliete le righe vuote)");
   if (S.dati.strati.some(r => !(num(r.s) > 0))) err.push("spessori degli strati");
   if (S.dati.strati.some(r => num(r.s) > 1)) err.push("spessori in metri (uno strato supera 1 m: avete convertito i millimetri?)");
-  for (const arr of Object.values(d.fin)) for (const f of arr) if (!(f.w > 0 && f.h > 0)) err.push("misure di finestre e porte");
+  if (d.A > 0 && d.B > 0) for (const p of Calc.pareti(d)) for (const f of (d.fin[p.nome] || [])) if (!(f.w > 0 && f.h > 0)) err.push("misure di finestre e porte");
   return [...new Set(err)];
 }
 function confermaS1() {
   const err = validaS1();
   if (err.length) { $("s1msg").className = "msg bad"; $("s1msg").textContent = "Controllate: " + err.join(", ") + "."; return; }
+  // tolgo le aperture di pareti che non esistono nella pianta scelta (resti di prove con un altro tipo di pianta)
+  const nomi = Calc.pareti(D()).map(p => p.nome); for (const k of Object.keys(S.dati.fin)) if (!nomi.includes(k)) delete S.dati.fin[k];
   S.s1.ok = true; $("s1msg").className = "msg good"; $("s1msg").textContent = "Dati confermati.";
   renderS2(); vai(2);
 }
@@ -240,9 +259,11 @@ function renderS2() {
     <p class="msg">λ e π dal manuale (Tab. 4.7 e 5.2); Rsi e Rse Tab. 4.13.${L.some(l => l.tipo === "aria5") ? " Intercapedine: λ equivalente = 0,05/0,18 (R = 0,18 m²K/W per 5 cm, Tab. 4.14)." : ""}</p>`;
   for (const k of ["Ag", "Af", "An", "U", "Phi"]) $("v" + k).value = S.s2.valori[k] ?? "";
   const bloccato = S.s2.invii >= MAX_INVII && !S.s2.ok;
-  $("sblocco").classList.toggle("hidden", !bloccato);
   $("btnS2").disabled = bloccato || S.s2.ok;
-  $("s2msg").textContent = S.s2.ok ? "Verifica superata." : `Invii con errori: ${S.s2.invii} su ${MAX_INVII}.`;
+  $("s2msg").className = "msg" + (bloccato ? " bad" : "");
+  $("s2msg").textContent = S.s2.ok ? "Verifica superata." : bloccato ? "5 invii con errori: chiedete al docente lo sblocco (in fondo alla pagina)." : `Invii con errori: ${S.s2.invii} su ${MAX_INVII}.`;
+  $("s2dati").classList.toggle("hidden", S.s2.ok || S.s2.invii === 0);
+  if (!S.s2.ok && S.s2.invii > 0) $("s2dati").innerHTML = riepilogoDatiS1();
   if (S.s2.ok) mostraEsitoS2();
 }
 function attesiS2() {
@@ -262,10 +283,13 @@ function inviaS2() {
   else S.s2.invii++;
   renderS2(); aggiornaSteps(); salvaLocale();
 }
-async function sblocca() {
-  const h = await Calc.sha256($("codice").value.trim().toUpperCase());
-  if (UNLOCK.includes(h)) { S.s2.invii = 0; S.s2.sblocchi++; $("codice").value = ""; renderS2(); salvaLocale(); }
-  else alert("Codice non valido.");
+// dati di ingresso che il sito sta usando (non i risultati): servono a trovare errori di battitura o aperture in più
+function riepilogoDatiS1() {
+  const d = D(), pareti = Calc.pareti(d);
+  return `<div class="notice warn"><strong>Controllate i dati che il sito sta usando</strong> (sezione 1): se qualcosa non corrisponde alla scheda, tornate alla sezione 1, correggete e confermate di nuovo.
+    <table><tr><th>Parete</th><th class="r">Lunghezza [m]</th><th>Aperture (largh. × alt., m)</th></tr>
+    ${pareti.map(p => `<tr><td>${p.nome}</td><td class="r">${fmt(p.L, 2)}</td><td>${(d.fin[p.nome] || []).map(f => `${f.porta ? "porta" : "finestra"} ${fmt(f.w, 2)} × ${fmt(f.h, 2)}`).join("; ") || "—"}</td></tr>`).join("")}</table>
+    <p>Altezza h = ${fmt(d.h, 2)} m · t_i = ${fmt(d.ti, 1)} °C · t_e = ${fmt(d.te, 1)} °C · strati: ${stratiIniziali().map(l => `${esc(l.nome)} ${fmt(l.s, 3)} m`).join(" / ")}</p></div>`;
 }
 function mostraEsitoS2() {
   const d = D(), att = attesiS2(), lim = U_LIMITE[d.zona];
@@ -278,54 +302,6 @@ function mostraEsitoS2() {
     <div class="actions"><button class="primary" onclick="vai(3)">Avanti: isolamento →</button></div>`;
 }
 
-// ---------------- sezione 3 ----------------
-function initS3() {
-  const sc = S.s3.sc;
-  $("iPos").value = sc.pos; popolaIso(); $("iIso").value = sc.iso; popolaSp(); $("iSp").value = sc.sp; $("iFreno").value = sc.freno;
-  aggiornaVisibilitaS3();
-  $("tabCatalogo").innerHTML = `<table><tr><th>Materiale</th><th class="r">λ</th><th class="r">π·10¹²</th><th class="r">€/(m²·cm)</th><th>Uso</th></tr>
-    ${ISOLANTI.map(m => `<tr><td>${m.nome}</td><td class="r">${fmt(m.lambda, 3)}</td><td class="r">${fmt(m.pi, m.pi < 0.1 ? 5 : 2)}</td><td class="r">${fmt(m.costoCm, 2)}</td><td>${[m.esterno.length ? "esterno" : "", m.interno.length ? "interno" : ""].filter(Boolean).join(", ")}</td></tr>`).join("")}
-    <tr><td>Posa esterna a cappotto</td><td colspan="3" class="r">${fmt(COSTI.posaEsterna, 2)} €/m²</td><td>+ ponteggio ${fmt(COSTI.ponteggio, 2)} €/m² di facciata</td></tr>
-    <tr><td>Posa interna (controparete in cartongesso)</td><td colspan="3" class="r">${fmt(COSTI.posaInterna, 2)} €/m²</td><td>include il cartongesso</td></tr>
-    <tr><td>Freno al vapore PE 0,2 mm</td><td class="r">0,35</td><td class="r">0,00375</td><td class="r">${fmt(COSTI.freno, 2)} €/m²</td><td>solo interno</td></tr></table>
-    <p class="msg">Prezzi: Prezzario Regione FVG 2025 (freno al vapore: stima). λ prodotti dal prezzario, π dal manuale.</p>`;
-  if (S.s3.ultimo) mostraRisultati3(S.s3.ultimo); else $("risultati3").innerHTML = `<p class="msg">Premete Calcola.</p>`;
-  $("nCalcoli").textContent = `Calcoli eseguiti: ${S.s3.calcoli}`;
-  bloccaS3(S.s3.ok);
-}
-function popolaIso() {
-  const pos = $("iPos").value;
-  $("iIso").innerHTML = ISOLANTI.filter(m => m[pos].length).map(m => `<option value="${m.id}">${m.nome}</option>`).join("");
-}
-function popolaSp() {
-  const m = ISOLANTI.find(x => x.id === $("iIso").value), pos = $("iPos").value;
-  $("iSp").innerHTML = m[pos].map(s => `<option value="${s}">${s * 10} mm</option>`).join("");
-}
-function aggiornaVisibilitaS3() {
-  const est = $("iPos").value === "esterno";
-  $("lblFreno").classList.toggle("hidden", est);
-  const d = D(), geo = Calc.geometria(d);
-  $("alertPonteggio").classList.toggle("hidden", !est);
-  if (est) $("alertPonteggio").innerHTML = `<strong>Isolamento esterno: serve il ponteggio.</strong> Facciata ${fmt(geo.P, 1)} m × ${fmt(d.h + 1, 2)} m = ${fmt(geo.P * (d.h + 1), 1)} m² × ${fmt(COSTI.ponteggio, 2)} €/m² = <strong>${eur(geo.P * (d.h + 1) * COSTI.ponteggio)}</strong> di costo fisso.<br>
-    Nota: con isolamento <strong>solo interno</strong> il limite di U sale del 30 % (${fmt(U_LIMITE[d.zona] * MAGG_INTERNO, 3)} invece di ${fmt(U_LIMITE[d.zona], 2)} W/m²K) e il ponteggio non serve. L'interno costa meno, ma è più difficile da fare bene, soprattutto per la condensa interstiziale.`;
-}
-function leggiS3() { return {pos: $("iPos").value, iso: $("iIso").value, sp: +$("iSp").value, freno: $("iPos").value === "esterno" ? "no" : $("iFreno").value}; }
-function cambioS3(e) {
-  if (e && e.target.id === "iPos") { popolaIso(); popolaSp(); }
-  if (e && e.target.id === "iIso") popolaSp();
-  S.s3.sc = leggiS3(); aggiornaVisibilitaS3();
-  $("btnS3").disabled = true; $("s3msg").className = "msg"; $("s3msg").textContent = "Scelta cambiata: premete Calcola.";
-  salvaLocale();
-}
-function calcolaS3() {
-  const d = D(), sc = leggiS3(); S.s3.sc = sc; S.s3.calcoli++;
-  const L = stratiIsolati(sc), geo = Calc.geometria(d), g = Calc.glaser(L, d.ti, d.fi, d.te, d.fe);
-  const g0 = Calc.glaser(stratiIniziali(), d.ti, d.fi, d.te, d.fe);
-  const prev = Calc.preventivo(sc, geo, d.h), lim = Calc.uLimite(d.zona, sc.pos);
-  const r = {sc, U: g.U, U0: g0.U, Phi: g.U * geo.An * (d.ti - d.te), Phi0: g0.U * geo.An * (d.ti - d.te), lim, costo: prev.totale, voci: prev.voci};
-  r.okU = r.U <= lim + 1e-9; r.okB = r.costo <= d.budget; r.ok = r.okU && r.okB;
-  S.s3.ultimo = r; mostraRisultati3(r); salvaLocale();
-}
 function barra(titolo, val, max, segni, colore, testo, sx, dx, nota) {
   const p = v => Math.max(0, Math.min(100, v / max * 100));
   return `<div class="bar"><div class="lbl"><span><b>${titolo}</b></span><span>${testo}</span></div><div class="track">
@@ -333,34 +309,7 @@ function barra(titolo, val, max, segni, colore, testo, sx, dx, nota) {
     ${segni.map(s => `<div class="mark" style="left:${p(s.v)}%"></div><div class="marklbl" style="left:${p(s.v)}%">${s.t}</div>`).join("")}</div>
     <div class="lbl" style="margin-top:20px"><span>${sx}</span><span>${dx}</span></div><div class="msg">${nota}</div></div>`;
 }
-function mostraRisultati3(r) {
-  const d = D();
-  $("nCalcoli").textContent = `Calcoli eseguiti: ${S.s3.calcoli}`;
-  $("risultati3").innerHTML = `
-    <div class="kpi"><div><span>U isolata</span><b>${fmt(r.U, 3)}</b><span>W/(m²K) · prima ${fmt(r.U0, 3)}</span></div>
-    <div><span>Φ</span><b>${fmt(r.Phi, 0)} W</b><span>−${fmt((1 - r.Phi / r.Phi0) * 100, 0)} % rispetto a ${fmt(r.Phi0, 0)} W</span></div>
-    <div><span>Costo</span><b>${eur(r.costo)}</b><span>budget ${eur(d.budget)}</span></div></div>
-    ${barra("Trasmittanza U", r.U0 - r.U, r.U0, [{v: r.U0 - r.lim, t: "limite di legge " + fmt(r.lim, 3)}], r.okU ? "#2e7d32" : "#f0a030", `U = ${fmt(r.U, 3)} W/(m²K)`, `U iniziale ${fmt(r.U0, 3)}`, "U = 0", r.okU ? "La barra supera la tacca del limite: obiettivo raggiunto." : "La barra deve oltrepassare la tacca nera del limite di legge (U più bassa = barra più lunga).")}
-    ${barra("Budget", r.costo, Math.max(d.budget, r.costo) * 1.15, [{v: d.budget, t: "budget " + eur(d.budget)}], r.okB ? "#0b6e69" : "#b3261e", `spesa ${eur(r.costo)} (${fmt(r.costo / d.budget * 100, 0)} %)`, "0 €", "", r.okB ? "La spesa resta prima della tacca del budget." : "La spesa supera la tacca nera del budget disponibile.")}
-    <table><tr><th>Voce</th><th class="r">Quantità</th><th class="r">€/u</th><th class="r">Totale</th></tr>
-    ${r.voci.map(v => `<tr><td>${v.voce}</td><td class="r">${fmt(v.q, 2)} ${v.u}</td><td class="r">${fmt(v.pu, 2)}</td><td class="r">${eur(v.tot)}</td></tr>`).join("")}
-    <tr><th colspan="3">Totale</th><th class="r">${eur(r.costo)}</th></tr></table>
-    <div class="figure">${svgStrato(stratiIsolati(r.sc), {titolo: "Stratigrafia isolata"})}</div>`;
-  const ok = r.ok && JSON.stringify(r.sc) === JSON.stringify(leggiS3());
-  $("btnS3").disabled = !ok || S.s3.ok;
-  $("s3msg").className = "msg " + (r.ok ? "good" : "bad");
-  $("s3msg").textContent = r.ok ? "Obiettivo raggiunto nel budget: potete confermare." : [!r.okU ? "U sopra il limite" : "", !r.okB ? "costo oltre il budget" : ""].filter(Boolean).join(" e ") + ".";
-}
-function bloccaS3(on) { $("s3").querySelectorAll("select,button").forEach(el => el.disabled = on); if (on) { $("s3msg").textContent = "Isolamento confermato."; } }
-function confermaS3() { S.s3.ok = true; bloccaS3(true); renderS4(); vai(4); }
 
-// ---------------- sezione 4 ----------------
-function renderS4() {
-  const d = D(), r = S.s3.ultimo;
-  $("riepilogo4").innerHTML = `<div class="kpi"><div><span>U prima → dopo</span><b>${fmt(r.U0, 3)} → ${fmt(r.U, 3)}</b><span>limite ${fmt(r.lim, 3)}</span></div>
-    <div><span>Φ prima → dopo</span><b>${fmt(r.Phi0, 0)} → ${fmt(r.Phi, 0)} W</b></div><div><span>Costo</span><b>${eur(r.costo)}</b><span>budget ${eur(d.budget)}</span></div></div>
-    <div class="two"><div class="figure">${svgPianta(d)}</div><div class="figure">${svgStrato(stratiIsolati(), {titolo: "Stratigrafia isolata"})}</div></div>`;
-}
 function xlsParete() {
   const d = D(), L = stratiIsolati(), geo = Calc.geometria(d);
   const rows = [["Progettista", S.gruppo.nomi], ["Località", d.loc, "Zona", d.zona], [],
@@ -407,56 +356,6 @@ function scaricaPNG(svgStr, nome) {
   img.src = url;
 }
 
-// ---------------- sezione 5 ----------------
-let sceltaStrato = null;
-function renderS5() {
-  const L = stratiIsolati();
-  $("svgClick").innerHTML = svgStrato(L, {titolo: "Stratigrafia isolata · cliccate uno strato", click: true, sel: sceltaStrato});
-  $("svgClick").querySelectorAll("[data-strato]").forEach(g => g.onclick = () => {
-    if (S.s5.ok) return; sceltaStrato = +g.dataset.strato; renderS5();
-    $("sceltaStrato").textContent = `Strato scelto: ${sceltaStrato}. ${L[sceltaStrato - 1].nome}`;
-  });
-  if (S.s5.ok) { $("domanda5").querySelectorAll("input,button").forEach(e => e.disabled = true); mostraSoluzione5(); }
-}
-function inviaS5() {
-  const r = document.querySelector('input[name="cond"]:checked');
-  if (!r) { $("sceltaStrato").textContent = "Scegliete sì o no."; return; }
-  if (r.value === "si" && !sceltaStrato) { $("sceltaStrato").textContent = "Cliccate lo strato sulla stratigrafia."; return; }
-  if (!confirm("Avete un solo tentativo. Inviare la risposta?")) return;
-  const d = D(), g = Calc.glaser(stratiIsolati(), d.ti, d.fi, d.te, d.fe);
-  const limite = g.dmin > -BORDER_PA && g.dmin <= BORDER_PA;
-  let esito;
-  if (r.value === "no") esito = g.primo === null ? "corretta" : (limite ? "corretta (caso al limite)" : "errata");
-  else if (g.primo === null) {
-    const vic = sceltaStrato && Math.min(g.d[sceltaStrato - 1], g.d[sceltaStrato]) <= BORDER_PA;
-    esito = limite && vic ? "corretta (caso al limite)" : "errata";
-  } else esito = sceltaStrato === g.primo ? "corretta" : (g.zona.includes(sceltaStrato) ? "parzialmente corretta" : "errata");
-  S.s5 = {ok: true, risposta: r.value, strato: r.value === "si" ? sceltaStrato : null, esito};
-  renderS5(); renderS6(); aggiornaSteps(); salvaLocale();
-}
-function mostraSoluzione5() {
-  const d = D(), L = stratiIsolati(), g = Calc.glaser(L, d.ti, d.fi, d.te, d.fe);
-  const corretta = g.primo === null ? "nessuna condensa" : `condensa: le rette si incrociano nello strato ${g.primo} (${L[g.primo - 1].nome})`;
-  const cls = S.s5.esito.startsWith("corrett") ? "good" : S.s5.esito.startsWith("parz") ? "warn" : "bad";
-  $("soluzione5").classList.remove("hidden");
-  $("soluzione5").innerHTML = `<div class="notice ${cls}"><strong>Risposta ${S.s5.esito}.</strong> Avete risposto: ${S.s5.risposta === "si" ? "sì, strato " + S.s5.strato : "no"}. Soluzione: ${corretta}. Minima distanza p_s − p_v: ${fmt(g.dmin, 0)} Pa${Math.abs(g.dmin) <= BORDER_PA ? " (caso al limite: piccoli arrotondamenti possono cambiare il risultato)" : ""}.</div>
-    <h3>Diagramma di Glaser</h3>
-    <div class="slider"><span>φ interna [%]</span><input type="range" id="slFi" min="30" max="80" step="1" value="${d.fi}"><b id="vFi">${d.fi}</b></div>
-    <div class="slider"><span>t esterna [°C]</span><input type="range" id="slTe" min="-15" max="10" step="1" value="${d.te}"><b id="vTe">${d.te}</b></div>
-    <div id="glaserBox" class="figure"></div>
-    <div id="nodiBox"></div>
-    <h3>Termografia simulata della sezione</h3>
-    <div id="termoBox" class="figure"></div>
-    <div class="actions"><button class="primary" onclick="vai(6)">Avanti: domande e relazione →</button></div>`;
-  const draw = () => {
-    const fi = +$("slFi").value, te = +$("slTe").value; $("vFi").textContent = fi; $("vTe").textContent = te;
-    const gg = Calc.glaser(L, d.ti, fi, te, d.fe);
-    $("glaserBox").innerHTML = svgGlaser(L, gg, `t_i ${d.ti} °C, φ_i ${fi} %, t_e ${te} °C, φ_e ${d.fe} %`);
-    $("nodiBox").innerHTML = tabNodi(L, gg);
-  };
-  $("slFi").oninput = draw; $("slTe").oninput = draw; draw();
-  $("termoBox").innerHTML = svgTermo();
-}
 function tabNodi(L, g) {
   return `<table><tr><th>Nodo</th><th>Posizione</th><th class="r">x [cm]</th><th class="r">t [°C]</th><th class="r">p_s [Pa]</th><th class="r">p_v [Pa]</th><th class="r">p_s − p_v [Pa]</th></tr>
   ${g.t.map((t, k) => `<tr class="${g.d[k] <= 0 ? "hl" : ""}"><td>${k}</td><td>${k === 0 ? "superficie interna" : k === L.length ? "superficie esterna" : `tra strato ${k} e ${k + 1}`}</td><td class="r">${fmt(g.x[k] * 100, 1)}</td><td class="r">${fmt(t, 2)}</td><td class="r">${fmt(g.ps[k], 0)}</td><td class="r">${fmt(g.pv[k], 0)}</td><td class="r">${fmt(g.d[k], 0)}</td></tr>`).join("")}</table>`;
@@ -530,10 +429,181 @@ function pannelloTermo(L, g, ox, titolo, info, tmin, tmax, id, bagnato) {
   [0, L.length].forEach(i => { s += `<text x="${xs[i]}" y="${y0 - 6}" text-anchor="${i ? "end" : "start"}" font-size="11" fill="#1d2327">${fmt(g.t[i], 1)} °C</text>`; });
   return s;
 }
+// ---------------- editor della stratigrafia (sezioni 3 e 6) ----------------
+function editorHTML(prog, id) {
+  const riga = (it, lato, i, n) => {
+    const iso = it.t === "iso" ? ISOLANTI.find(m => m.id === it.m) : null;
+    const opz = ISOLANTI.filter(m => m[lato === "int" ? "interno" : "esterno"].length);
+    return `<div class="erow">
+      <select data-ed="${id}" data-lato="${lato}" data-i="${i}" data-k="mat">${it.t === "pe" ? `<option value="pe" selected>Freno al vapore in PE 0,2 mm</option>` : opz.map(m => `<option value="${m.id}" ${m.id === it.m ? "selected" : ""}>${m.nome}</option>`).join("")}</select>
+      ${iso ? `<select data-ed="${id}" data-lato="${lato}" data-i="${i}" data-k="sp">${iso[lato === "int" ? "interno" : "esterno"].map(sp => `<option value="${sp}" ${sp === it.sp ? "selected" : ""}>${sp * 10} mm</option>`).join("")}</select>` : `<span class="msg">0,2 mm</span>`}
+      <span class="mv"><button class="x" data-ed="${id}" data-lato="${lato}" data-i="${i}" data-k="su" title="Sposta verso l'interno" ${i === 0 ? "disabled" : ""}>▲</button><button class="x" data-ed="${id}" data-lato="${lato}" data-i="${i}" data-k="giu" title="Sposta verso l'esterno" ${i === n - 1 ? "disabled" : ""}>▼</button><button class="x" data-ed="${id}" data-lato="${lato}" data-i="${i}" data-k="del" title="Elimina">✕</button></span></div>`;
+  };
+  const base = stratiIniziali();
+  return `<div class="editor">
+    <div class="elato"><b>INTERNO</b>${prog.int.length ? `<div class="msg">+ controparete in cartongesso 12,5 mm (automatica)</div>` : ""}
+      ${prog.int.map((it, i) => riga(it, "int", i, prog.int.length)).join("")}
+      <button class="ghost small" data-ed="${id}" data-lato="int" data-k="addiso">+ isolante interno</button> <button class="ghost small" data-ed="${id}" data-lato="int" data-k="addpe">+ freno al vapore interno</button></div>
+    <div class="emur">Muratura esistente: ${base.map((l, i) => `${i + 1}. ${esc(l.nome)} ${fmt(l.s * 1000, 0)} mm`).join(" · ")}</div>
+    <div class="elato">${prog.est.map((it, i) => riga(it, "est", i, prog.est.length)).join("")}
+      <button class="ghost small" data-ed="${id}" data-lato="est" data-k="addiso">+ isolante esterno (cappotto)</button> <button class="ghost small" data-ed="${id}" data-lato="est" data-k="addpe">+ freno al vapore esterno</button>
+      ${Calc.haEsterno(prog) ? `<div class="msg">+ rasatura e finitura del cappotto 8 mm (automatica)</div>` : ""}<b>ESTERNO</b></div></div>`;
+}
+// collega i comandi dell'editor; onChange(prog) viene chiamato a ogni modifica
+function collegaEditor(cont, getProg, onChange, id) {
+  cont.querySelectorAll(`[data-ed="${id}"]`).forEach(el => {
+    const ev = el.tagName === "SELECT" ? "onchange" : "onclick";
+    el[ev] = () => {
+      const p = getProg(), lato = el.dataset.lato, arr = p[lato], i = +el.dataset.i, k = el.dataset.k;
+      const cat = ISOLANTI.filter(m => m[lato === "int" ? "interno" : "esterno"].length);
+      if (k === "addiso") { const m = cat[0]; arr.push({t: "iso", m: m.id, sp: m[lato === "int" ? "interno" : "esterno"][1] || m[lato === "int" ? "interno" : "esterno"][0]}); }
+      if (k === "addpe") arr.push({t: "pe"});
+      if (k === "del") arr.splice(i, 1);
+      if (k === "su" && i > 0) [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+      if (k === "giu" && i < arr.length - 1) [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+      if (k === "mat") { const m = ISOLANTI.find(x => x.id === el.value), sps = m[lato === "int" ? "interno" : "esterno"]; arr[i] = {t: "iso", m: m.id, sp: sps.includes(arr[i].sp) ? arr[i].sp : sps[Math.min(1, sps.length - 1)]}; }
+      if (k === "sp") arr[i].sp = +el.value;
+      onChange(p);
+    };
+  });
+}
+function alertPonteggio(prog) {
+  const d = D(), geo = Calc.geometria(d);
+  return `<strong>${Calc.haEsterno(prog) ? "Isolamento esterno: serve il ponteggio." : "Ponteggio: serve solo con isolamento esterno."}</strong> Facciata ${fmt(geo.P, 1)} m × ${fmt(d.h + 1, 2)} m = ${fmt(geo.P * (d.h + 1), 1)} m² × ${fmt(COSTI.ponteggio, 2)} €/m² = <strong>${eur(geo.P * (d.h + 1) * COSTI.ponteggio)}</strong> di costo fisso.<br>
+    Con isolamento <strong>solo interno</strong> il limite di U sale del 30 % (${fmt(U_LIMITE[d.zona] * MAGG_INTERNO, 3)} invece di ${fmt(U_LIMITE[d.zona], 2)} W/m²K) e il ponteggio non serve. L'interno costa meno, ma è più difficile da fare bene, soprattutto per la condensa interstiziale.`;
+}
+function tabCatalogo() {
+  return `<table><tr><th>Materiale</th><th class="r">λ</th><th class="r">π·10¹²</th><th class="r">€/(m²·cm)</th><th>Uso</th></tr>
+    ${ISOLANTI.map(m => `<tr><td>${m.nome}</td><td class="r">${fmt(m.lambda, 3)}</td><td class="r">${fmt(m.pi, m.pi < 0.1 ? 5 : 2)}</td><td class="r">${fmt(m.costoCm, 2)}</td><td>${[m.esterno.length ? "esterno" : "", m.interno.length ? "interno" : ""].filter(Boolean).join(", ")}</td></tr>`).join("")}
+    <tr><td>Posa esterna a cappotto</td><td colspan="3" class="r">${fmt(COSTI.posaEsterna, 2)} €/m²</td><td>+ ponteggio ${fmt(COSTI.ponteggio, 2)} €/m² di facciata</td></tr>
+    <tr><td>Posa interna (controparete in cartongesso)</td><td colspan="3" class="r">${fmt(COSTI.posaInterna, 2)} €/m²</td><td>include il cartongesso</td></tr>
+    <tr><td>Freno al vapore PE 0,2 mm</td><td class="r">0,35</td><td class="r">0,00375</td><td class="r">${fmt(COSTI.freno, 2)} €/m²</td><td>interno o esterno</td></tr></table>
+    <p class="msg">Prezzi: Prezzario Regione FVG 2025 (freno al vapore: stima). λ prodotti dal prezzario, π dal manuale.</p>`;
+}
+function tabPreventivo(r) {
+  return `<table><tr><th>Voce</th><th class="r">Quantità</th><th class="r">€/u</th><th class="r">Totale</th></tr>
+    ${r.voci.map(v => `<tr><td>${v.voce}</td><td class="r">${fmt(v.q, 2)} ${v.u}</td><td class="r">${fmt(v.pu, 2)}</td><td class="r">${eur(v.tot)}</td></tr>`).join("")}
+    <tr><th colspan="3">Totale</th><th class="r">${eur(r.costo)}</th></tr></table>`;
+}
+function barre(r, U0) {
+  const d = D();
+  return barra("Trasmittanza U", U0 - r.U, U0, [{v: U0 - r.lim, t: "limite di legge " + fmt(r.lim, 3)}], r.okU ? "#2e7d32" : "#f0a030", `U = ${fmt(r.U, 3)} W/(m²K)`, `U iniziale ${fmt(U0, 3)}`, "U = 0", r.okU ? "La barra supera la tacca del limite: obiettivo raggiunto." : "La barra deve oltrepassare la tacca nera del limite di legge (U più bassa = barra più lunga).")
+    + barra("Budget", r.costo, Math.max(d.budget, r.costo) * 1.15, [{v: d.budget, t: "budget " + eur(d.budget)}], r.okB ? "#0b6e69" : "#b3261e", `spesa ${eur(r.costo)} (${fmt(r.costo / d.budget * 100, 0)} %)`, "0 €", "", r.okB ? "La spesa resta prima della tacca del budget." : "La spesa supera la tacca nera del budget disponibile.");
+}
+
+// ---------------- sezione 3 ----------------
+function initS3() {
+  $("tabCatalogo").innerHTML = tabCatalogo();
+  renderEditor3();
+  if (S.s3.ultimo) mostraRisultati3(S.s3.ultimo); else $("risultati3").innerHTML = `<p class="msg">Premete Calcola.</p>`;
+  $("nCalcoli").textContent = `Calcoli eseguiti: ${S.s3.calcoli}`;
+  bloccaS3(S.s3.ok);
+}
+function renderEditor3() {
+  const cont = $("editor3"); cont.innerHTML = editorHTML(S.s3.prog, "e3");
+  $("alertPonteggio3").classList.remove("hidden"); $("alertPonteggio3").innerHTML = alertPonteggio(S.s3.prog);
+  if (S.s3.ok) { cont.querySelectorAll("select,button").forEach(e => e.disabled = true); return; }
+  collegaEditor(cont, () => S.s3.prog, p => { S.s3.prog = p; renderEditor3(); $("btnS3").disabled = true; $("s3msg").className = "msg"; $("s3msg").textContent = "Stratigrafia cambiata: premete Calcola."; salvaLocale(); }, "e3");
+}
+function calcolaS3() {
+  const p = S.s3.prog;
+  if (!p.int.some(it => it.t === "iso") && !p.est.some(it => it.t === "iso")) { $("s3msg").className = "msg bad"; $("s3msg").textContent = "Aggiungete almeno un isolante."; return; }
+  S.s3.calcoli++;
+  const r = valuta(p), d = D(), geo = Calc.geometria(d), g0 = Calc.glaser(stratiIniziali(), d.ti, d.fi, d.te, d.fe);
+  S.s3.ultimo = {prog: copia(p), U: r.U, U0: g0.U, lim: r.lim, costo: r.costo, voci: r.voci, okU: r.okU, okB: r.okB, ok: r.okU && r.okB,
+    Phi: r.U * geo.An * (d.ti - d.te), Phi0: g0.U * geo.An * (d.ti - d.te)};
+  mostraRisultati3(S.s3.ultimo); salvaLocale();
+}
+function mostraRisultati3(r) {
+  $("nCalcoli").textContent = `Calcoli eseguiti: ${S.s3.calcoli}`;
+  $("risultati3").innerHTML = `
+    <div class="kpi"><div><span>U isolata</span><b>${fmt(r.U, 3)}</b><span>W/(m²K) · prima ${fmt(r.U0, 3)}</span></div>
+    <div><span>Φ</span><b>${fmt(r.Phi, 0)} W</b><span>−${fmt((1 - r.Phi / r.Phi0) * 100, 0)} % rispetto a ${fmt(r.Phi0, 0)} W</span></div>
+    <div><span>Costo</span><b>${eur(r.costo)}</b><span>budget ${eur(D().budget)}</span></div></div>
+    ${barre(r, r.U0)}${tabPreventivo(r)}
+    <div class="figure">${svgStrato(Calc.costruisci(stratiIniziali(), r.prog), {titolo: "Stratigrafia isolata"})}</div>`;
+  const ok = r.ok && JSON.stringify(r.prog) === JSON.stringify(S.s3.prog);
+  $("btnS3").disabled = !ok || S.s3.ok;
+  $("s3msg").className = "msg " + (r.ok ? "good" : "bad");
+  $("s3msg").textContent = S.s3.ok ? "Isolamento confermato." : r.ok ? "Obiettivo raggiunto nel budget: potete confermare." : [!r.okU ? "U sopra il limite" : "", !r.okB ? "costo oltre il budget" : ""].filter(Boolean).join(" e ") + ".";
+}
+function bloccaS3(on) { $("s3").querySelectorAll("#editor3 select,#editor3 button,#btnCalcola,#btnS3").forEach(el => el.disabled = on); if (on) { $("s3msg").textContent = "Isolamento confermato."; } }
+function confermaS3() { S.s3.ok = true; S.s6.prog = copia(S.s3.ultimo.prog); bloccaS3(true); renderS4(); vai(4); }
+
+// ---------------- sezione 4 ----------------
+function renderS4() {
+  const d = D(), r = S.s3.ultimo;
+  $("riepilogo4").innerHTML = `<div class="kpi"><div><span>U prima → dopo</span><b>${fmt(r.U0, 3)} → ${fmt(r.U, 3)}</b><span>limite ${fmt(r.lim, 3)}</span></div>
+    <div><span>Φ prima → dopo</span><b>${fmt(r.Phi0, 0)} → ${fmt(r.Phi, 0)} W</b></div><div><span>Costo</span><b>${eur(r.costo)}</b><span>budget ${eur(d.budget)}</span></div></div>
+    <div class="two"><div class="figure">${svgPianta(d)}</div><div class="figure">${svgStrato(stratiIsolati(), {titolo: "Stratigrafia isolata"})}</div></div>`;
+}
+
+// ---------------- sezione 5 ----------------
+let sceltaStrato = null;
+function renderS5() {
+  const L = stratiIsolati();
+  $("svgClick").innerHTML = svgStrato(L, {titolo: "Stratigrafia isolata · cliccate uno strato", click: true, sel: S.s5.ok ? S.s5.strato : sceltaStrato});
+  $("svgClick").querySelectorAll("[data-strato]").forEach(g => g.onclick = () => {
+    if (S.s5.ok) return; sceltaStrato = +g.dataset.strato; renderS5();
+    $("sceltaStrato").textContent = `Strato scelto: ${sceltaStrato}. ${L[sceltaStrato - 1].nome}`;
+  });
+  if (S.s5.ok) { $("domanda5").querySelectorAll("input,button").forEach(e => e.disabled = true); mostraSoluzione5(); }
+}
+function inviaS5() {
+  const r = document.querySelector('input[name="cond"]:checked');
+  if (!r) { $("sceltaStrato").textContent = "Scegliete sì o no."; return; }
+  if (r.value === "si" && !sceltaStrato) { $("sceltaStrato").textContent = "Cliccate lo strato sulla stratigrafia."; return; }
+  if (!confirm("Avete un solo tentativo. Inviare la risposta?")) return;
+  const d = D(), g = Calc.glaser(stratiIsolati(), d.ti, d.fi, d.te, d.fe);
+  const limite = g.dmin > -BORDER_PA && g.dmin <= BORDER_PA;
+  let esito;
+  if (r.value === "no") esito = g.primo === null ? "corretta" : (limite ? "corretta (caso al limite)" : "errata");
+  else if (g.primo === null) {
+    const vic = sceltaStrato && Math.min(g.d[sceltaStrato - 1], g.d[sceltaStrato]) <= BORDER_PA;
+    esito = limite && vic ? "corretta (caso al limite)" : "errata";
+  } else esito = sceltaStrato === g.primo ? "corretta" : (g.zona.includes(sceltaStrato) ? "parzialmente corretta" : "errata");
+  S.s5 = {ok: true, risposta: r.value, strato: r.value === "si" ? sceltaStrato : null, esito};
+  renderS5(); renderS6(); aggiornaSteps(); salvaLocale();
+}
+function mostraSoluzione5() {
+  const d = D(), L = stratiIsolati(), g = Calc.glaser(L, d.ti, d.fi, d.te, d.fe);
+  const corretta = g.primo === null ? "nessuna condensa" : `condensa: le rette si incrociano nello strato ${g.primo} (${L[g.primo - 1].nome})`;
+  const e = S.s5.esito || "", cls = e.startsWith("corrett") ? "good" : e.startsWith("parz") ? "warn" : e.startsWith("saltata") ? "info" : "bad";
+  $("soluzione5").classList.remove("hidden");
+  $("soluzione5").innerHTML = `<div class="notice ${cls}"><strong>Risposta ${e}.</strong> ${S.s5.risposta ? `Avete risposto: ${S.s5.risposta === "si" ? "sì, strato " + S.s5.strato : "no"}.` : ""} Soluzione: ${corretta}. Minima distanza p_s − p_v: ${fmt(g.dmin, 0)} Pa${Math.abs(g.dmin) <= BORDER_PA ? " (caso al limite: piccoli arrotondamenti possono cambiare il risultato)" : ""}.</div>
+    <h3>Diagramma di Glaser della vostra stratigrafia</h3>
+    <div class="figure">${svgGlaser(L, g, `t_i ${d.ti} °C, φ_i ${d.fi} %, t_e ${d.te} °C, φ_e ${d.fe} %`)}</div>${tabNodi(L, g)}
+    <div class="actions"><button class="primary" onclick="vai(6)">Avanti: ${g.primo === null ? "verificate e confermate il progetto" : "correggete la stratigrafia"} →</button></div>`;
+}
+
+// ---------------- sezione 6: progetto senza condensa, aggiornamento in tempo reale ----------------
+function renderS6() {
+  if (!S.s6.prog) S.s6.prog = copia(progV1());
+  const cont = $("editor6"); cont.innerHTML = editorHTML(S.s6.prog, "e6");
+  $("alertPonteggio6").classList.remove("hidden"); $("alertPonteggio6").innerHTML = alertPonteggio(S.s6.prog);
+  if (S.s6.ok) cont.querySelectorAll("select,button").forEach(e => e.disabled = true);
+  else collegaEditor(cont, () => S.s6.prog, p => { S.s6.prog = p; S.s6.modifiche++; renderS6(); salvaLocale(); }, "e6");
+  const d = D(), r = valuta(S.s6.prog), g = r.g, U0 = Calc.glaser(stratiIniziali(), d.ti, d.fi, d.te, d.fe).U;
+  const cond = g.primo === null && g.dmin > 0;
+  $("kpi6").innerHTML = `<div class="kpi"><div><span>U</span><b>${fmt(r.U, 3)}</b><span>limite ${fmt(r.lim, 3)} ${r.okU ? "✓" : "✗"}</span></div>
+    <div><span>Costo</span><b>${eur(r.costo)}</b><span>budget ${eur(d.budget)} ${r.okB ? "✓" : "✗"}</span></div>
+    <div><span>Condensa interstiziale</span><b style="color:${cond ? "#2e7d32" : "#b3261e"}">${cond ? "no" : "sì"}</b><span>min p_s − p_v = ${fmt(g.dmin, 0)} Pa ${cond ? "✓" : "✗"}</span></div></div>
+    ${barre(r, U0)}<details><summary>Preventivo</summary>${tabPreventivo(r)}</details>`;
+  $("strato6").innerHTML = svgStrato(r.L, {titolo: "Stratigrafia del progetto"});
+  $("glaser6").innerHTML = svgGlaser(r.L, g, `t_i ${d.ti} °C, φ_i ${d.fi} %, t_e ${d.te} °C, φ_e ${d.fe} %`);
+  $("nodi6").innerHTML = tabNodi(r.L, g);
+  const ok = r.okU && r.okB && cond;
+  $("btnS6").disabled = !ok || S.s6.ok;
+  $("s6msg").className = "msg " + (ok ? "good" : "bad");
+  $("s6msg").textContent = S.s6.ok ? "Progetto confermato." : ok ? "Tutte e tre le condizioni sono rispettate: potete confermare." : "Manca: " + [!r.okU ? "U sotto il limite" : "", !r.okB ? "costo nel budget" : "", !cond ? "nessuna condensa" : ""].filter(Boolean).join(", ") + ".";
+}
+function confermaS6() { S.s6.ok = true; renderS6(); renderS7(); vai(7); }
+
+// ---------------- termografie ----------------
 function svgTermo() {
-  const d = D(), L0 = stratiIniziali(), L1 = stratiIsolati();
-  const g0 = Calc.glaser(L0, d.ti, d.fi, d.te, d.fe), f = Calc.freddo30(L1, d.ti, d.fi, d.te, d.fe);
-  const tmin = d.te, tmax = d.ti, geo = Calc.geometria(d);
+  const d = D(), L0 = stratiIniziali(), L1 = stratiIsolati(), LF = stratiFinali(), geo = Calc.geometria(d);
+  const g0 = Calc.glaser(L0, d.ti, d.fi, d.te, d.fe), f = Calc.freddo30(L1, d.ti, d.fi, d.te, d.fe), gF = Calc.glaser(LF, d.ti, d.fi, d.te, d.fe);
+  const tmin = d.te, tmax = d.ti;
   const L2 = L1.map((l, i) => { const e = f.eventi.find(e => e.strato === i); return e ? {...l, fm: e.fm} : l; });
   let wet = "";
   if (f.eventi.length) {
@@ -542,77 +612,121 @@ function svgTermo() {
   }
   const P = "t" + (++UID);
   let s = pannelloTermo(L0, g0, 20, "Prima (parete iniziale)", `U = ${fmt(g0.U, 3)} W/(m²K)`, tmin, tmax, P + "a");
-  s += pannelloTermo(L1, f.g, 275, "Dopo l'isolamento", `U = ${fmt(f.g.U, 3)} W/(m²K)`, tmin, tmax, P + "b");
-  s += pannelloTermo(L2, f.g2, 530, "Dopo 30 giorni di freddo intenso", `U = ${fmt(f.g2.U, 3)} W/(m²K)${f.eventi.length ? ` (+${fmt((f.g2.U / f.g.U - 1) * 100, 0)} %)` : " (invariata)"}`, tmin, tmax, P + "c", f.eventi.length ? wet : "la parete resta asciutta");
-  // scala colori
-  let leg = ""; for (let i = 0; i <= 20; i++) { const t = tmin + (tmax - tmin) * i / 20; leg += `<rect x="${200 + i * 18}" y="420" width="18" height="12" fill="${tCol(t, tmin, tmax)}"/>`; }
-  return `<svg viewBox="0 0 790 490" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif"><rect width="100%" height="100%" fill="#fff"/>${s}
-    ${leg}<text x="194" y="430" text-anchor="end" font-size="11">${fmt(tmin, 0)} °C</text><text x="584" y="430" font-size="11">${fmt(tmax, 0)} °C</text>
-    <text x="20" y="460" font-size="10.5" fill="#5d6a72">Interno a sinistra. Temperature calcolate ai nodi e interpolate nello strato; strati sottilissimi ingranditi. La zona bagnata non è più fredda perché condensa:</text>
-    <text x="20" y="476" font-size="10.5" fill="#5d6a72">peggiora perché l'acqua fa condurre di più l'isolante. 30 giorni alle condizioni di progetto: scenario peggiore. Una termocamera vede solo le superfici.</text></svg>`;
+  s += pannelloTermo(L1, f.g, 275, "Isolamento della sezione 3", `U = ${fmt(f.g.U, 3)} W/(m²K)`, tmin, tmax, P + "b");
+  s += `<g transform="translate(0,370)">` + pannelloTermo(L2, f.g2, 20, "Sezione 3 dopo 30 giorni di freddo", `U = ${fmt(f.g2.U, 3)} W/(m²K)${f.eventi.length ? ` (+${fmt((f.g2.U / f.g.U - 1) * 100, 0)} %)` : " (invariata)"}`, tmin, tmax, P + "c", f.eventi.length ? wet : "la parete resta asciutta");
+  s += pannelloTermo(LF, gF, 275, "Progetto finale (sezione 6)", `U = ${fmt(gF.U, 3)} W/(m²K)`, tmin, tmax, P + "d") + `</g>`;
+  let leg = ""; for (let i = 0; i <= 20; i++) { const t = tmin + (tmax - tmin) * i / 20; leg += `<rect x="${60 + i * 18}" y="790" width="18" height="12" fill="${tCol(t, tmin, tmax)}"/>`; }
+  return `<svg viewBox="0 0 540 860" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif"><rect width="100%" height="100%" fill="#fff"/>${s}
+    ${leg}<text x="54" y="800" text-anchor="end" font-size="11">${fmt(tmin, 0)} °C</text><text x="444" y="800" font-size="11">${fmt(tmax, 0)} °C</text>
+    <text x="20" y="826" font-size="10" fill="#5d6a72">Interno a sinistra. Temperature ai nodi, interpolate nello strato; strati sottilissimi ingranditi. La zona bagnata</text>
+    <text x="20" y="840" font-size="10" fill="#5d6a72">peggiora perché l'acqua fa condurre di più l'isolante. 30 giorni alle condizioni di progetto: scenario peggiore.</text>
+    <text x="20" y="854" font-size="10" fill="#5d6a72">Una termocamera vede solo le superfici, non la condensa interna.</text></svg>`;
 }
 
-// ---------------- sezione 6 ----------------
+// ---------------- sezione 7 ----------------
 const DOMANDE = [
   "In quale strato cade il salto di temperatura più grande? E il salto di pressione di vapore più grande? Sono nello stesso strato? Citate i vostri valori in °C e Pa.",
-  "Dove le due curve sono più vicine? Quanti Pa separano p_s e p_v in quel punto?",
+  "Nella stratigrafia della sezione 3, dove le due curve erano più vicine (o si incrociavano)? Quanti Pa separavano p_s e p_v?",
   "Il vostro isolante è all'interno o all'esterno della muratura? Come cambia la temperatura della muratura rispetto alla parete non isolata?",
   "Quale strato ha la R_v più grande? Si trova sul lato caldo o sul lato freddo dell'isolante? Perché questo conta?",
-  "Spostate il cursore di φ interna: a quale valore compare (o scompare) la condensa? Che ambiente della casa potrebbe arrivarci?",
-  "Se c'è condensa: proponete una modifica (posizione dell'isolante, freno al vapore, altro materiale) e spiegate dove si sposterebbe la spezzata di p_v. Se non c'è: quale modifica la farebbe comparire?",
-  "Confrontate costo e U della vostra soluzione con l'alternativa interno/esterno che avete scartato: cosa avete guadagnato e cosa avete rischiato?",
+  "Che cosa avete cambiato nella sezione 6 per eliminare la condensa (o per migliorare il progetto)? Come si è spostata la spezzata di p_v?",
+  "Guardate la termografia «dopo 30 giorni di freddo»: che cosa succede all'isolante bagnato e perché la parete peggiora?",
+  "Confrontate costo e U del progetto finale con la prima versione: cosa avete guadagnato e cosa avete speso in più?",
 ];
-function renderS6() {
-  $("domande6").innerHTML = DOMANDE.map((q, i) => `<p class="q">${i + 1}. ${q}</p><textarea data-q="${i}">${esc(S.s6.risposte[i] || "")}</textarea>`).join("");
-  $("domande6").querySelectorAll("textarea").forEach(t => t.oninput = () => { S.s6.risposte[+t.dataset.q] = t.value; salvaLocale(); });
-  if (S.s6.fatto) mostraApprofondimenti();
+function renderS7() {
+  $("termoBox").innerHTML = svgTermo();
+  $("domande7").innerHTML = DOMANDE.map((q, i) => `<p class="q">${i + 1}. ${q}</p><textarea data-q="${i}">${esc(S.s7.risposte[i] || "")}</textarea>`).join("");
+  $("domande7").querySelectorAll("textarea").forEach(t => t.oninput = () => { S.s7.risposte[+t.dataset.q] = t.value; salvaLocale(); });
+  if (S.s7.fatto) mostraApprofondimenti();
 }
 function mostraApprofondimenti() {
-  const d = D(), g = Calc.glaser(stratiIsolati(), d.ti, d.fi, d.te, d.fe);
-  $("approf6").classList.remove("hidden");
-  $("approf6").innerHTML = `<h3>Approfondimenti</h3>
-    <div class="notice info"><strong>Condensa superficiale.</strong> Sulla superficie interna (nodo 0) t = ${fmt(g.t[0], 1)} °C, p_s = ${fmt(g.ps[0], 0)} Pa, mentre p_v interna = ${fmt(g.pvi, 0)} Pa: ${g.ps[0] > g.pvi ? "nessuna condensa superficiale" : "condensa superficiale!"}. Negli angoli e sui ponti termici la superficie è più fredda: lì nasce la muffa.</div>
+  const d = D(), g = Calc.glaser(stratiFinali(), d.ti, d.fi, d.te, d.fe);
+  $("approf7").classList.remove("hidden");
+  $("approf7").innerHTML = `<h3>Approfondimenti</h3>
+    <div class="notice info"><strong>Condensa superficiale.</strong> Sulla superficie interna (nodo 0) del progetto finale t = ${fmt(g.t[0], 1)} °C, p_s = ${fmt(g.ps[0], 0)} Pa, mentre p_v interna = ${fmt(g.pvi, 0)} Pa: ${g.ps[0] > g.pvi ? "nessuna condensa superficiale" : "condensa superficiale!"}. Negli angoli e sui ponti termici la superficie è più fredda: lì nasce la muffa.</div>
     <div class="notice info"><strong>Cosa dice la norma.</strong> La UNI EN ISO 13788 ammette una condensa interstiziale limitata se evapora nei mesi estivi: la verifica reale è mese per mese e conta i grammi d'acqua. Qui si usa solo la condizione di progetto invernale.</div>
     <div class="notice info"><strong>Limite del metodo ai nodi.</strong> La curva vera di p_s dentro uno strato non è una retta ma una curva più bassa: negli isolanti spessi la condensa può comparire prima di quanto mostra il diagramma.</div>
     <div class="actions left wrap"><button class="primary" id="btnPrint">Stampa / salva la relazione in PDF</button><button class="ghost" id="btnXlsRel">Scarica la relazione in Excel</button></div>`;
   $("btnPrint").onclick = stampa; $("btnXlsRel").onclick = xlsRelazione;
 }
 function generaRelazione() {
-  if (S.s6.risposte.filter(x => x && x.trim()).length < DOMANDE.length && !confirm("Alcune domande non hanno risposta. Generare comunque la relazione?")) return;
-  S.s6.fatto = true; mostraApprofondimenti(); aggiornaSteps(); salvaLocale();
+  if (S.s7.risposte.filter(x => x && x.trim()).length < DOMANDE.length && !confirm("Alcune domande non hanno risposta. Generare comunque la relazione?")) return;
+  S.s7.fatto = true; mostraApprofondimenti(); aggiornaSteps(); salvaLocale();
 }
+const registro = () => `Invii con errori nella verifica Excel: ${Math.max(0, S.s2.inviiTot - (S.s2.ok && !S.sblocchi[2] ? 1 : 0))} · calcoli nella sezione isolamento: ${S.s3.calcoli} · modifiche nella sezione 6: ${S.s6.modifiche} · sblocchi del docente: ${Object.entries(S.sblocchi).map(([k, v]) => `sezione ${k} (${v})`).join(", ") || "nessuno"}`;
 function htmlRelazione() {
-  const d = D(), geo = Calc.geometria(d), att = attesiS2(), r = S.s3.ultimo, L = stratiIsolati(), g = Calc.glaser(L, d.ti, d.fi, d.te, d.fe);
+  const d = D(), att = attesiS2(), r = S.s3.ultimo, L = stratiIsolati(), g = Calc.glaser(L, d.ti, d.fi, d.te, d.fe), rf = valuta(S.s6.prog || progV1());
   return `<h1>Analisi termoigrometrica</h1><p>Progettista: ${esc(S.gruppo.nomi)} · ${esc(d.loc)} (zona ${d.zona}) · ${new Date().toLocaleDateString("it-IT")}</p>
   <h2>1. Dati di progetto</h2><p>t_i = ${d.ti} °C, φ_i = ${d.fi} %, t_e = ${d.te} °C, φ_e = ${d.fe} %, budget ${eur(d.budget)}.</p>
   <div class="figs">${svgPianta(d)}${svgStrato(stratiIniziali(), {titolo: "Stratigrafia iniziale"})}</div>
   <h2>2. Aree e dispersione iniziale</h2><table><tr><th>A lorda</th><th>A finestre e porte</th><th>A netta</th><th>U iniziale</th><th>Φ iniziale</th></tr>
   <tr><td>${fmt(att.Ag, 2)} m²</td><td>${fmt(att.Af, 2)} m²</td><td>${fmt(att.An, 2)} m²</td><td>${fmt(att.U, 3)} W/(m²K)</td><td>${fmt(att.Phi, 0)} W</td></tr></table>
-  <p>Invii con errori: ${S.s2.inviiTot - 1} · codici di sblocco usati: ${S.s2.sblocchi}</p>
-  <h2>3. Isolamento e preventivo</h2>${svgStrato(L, {titolo: "Stratigrafia isolata"})}
-  <p>U: ${fmt(r.U0, 3)} → ${fmt(r.U, 3)} W/(m²K) (limite ${fmt(r.lim, 3)}); Φ: ${fmt(r.Phi0, 0)} → ${fmt(r.Phi, 0)} W (−${fmt((1 - r.Phi / r.Phi0) * 100, 0)} %). Calcoli eseguiti: ${S.s3.calcoli}.</p>
-  <table><tr><th>Voce</th><th>Quantità</th><th>€/u</th><th>Totale</th></tr>${r.voci.map(v => `<tr><td>${v.voce}</td><td>${fmt(v.q, 2)} ${v.u}</td><td>${fmt(v.pu, 2)}</td><td>${eur(v.tot)}</td></tr>`).join("")}<tr><th colspan="3">Totale (budget ${eur(d.budget)})</th><th>${eur(r.costo)}</th></tr></table>
-  <h2>4. Verifica di Glaser</h2><p>Risposta data: ${S.s5.risposta === "si" ? "condensa nello strato " + S.s5.strato : "nessuna condensa"} — esito: <b>${S.s5.esito}</b>.</p>
+  <p>${registro()}</p>
+  <h2>3. Isolamento (prima versione) e preventivo</h2>${svgStrato(L, {titolo: "Stratigrafia isolata (sezione 3)"})}
+  <p>U: ${fmt(r.U0, 3)} → ${fmt(r.U, 3)} W/(m²K) (limite ${fmt(r.lim, 3)}); Φ: ${fmt(r.Phi0, 0)} → ${fmt(r.Phi, 0)} W (−${fmt((1 - r.Phi / r.Phi0) * 100, 0)} %).</p>
+  ${tabPreventivo(r)}
+  <h2>4. Verifica di Glaser della prima versione</h2><p>Risposta data: ${S.s5.risposta ? (S.s5.risposta === "si" ? "condensa nello strato " + S.s5.strato : "nessuna condensa") : "—"} — esito: <b>${S.s5.esito}</b>.</p>
   ${svgGlaser(L, g, `t_i ${d.ti} °C, φ_i ${d.fi} %, t_e ${d.te} °C, φ_e ${d.fe} %`)}${tabNodi(L, g)}
-  <h2>5. Termografia simulata della sezione</h2>${svgTermo()}
-  <h2>6. Risposte alle domande</h2>${DOMANDE.map((q, i) => `<p><b>${i + 1}. ${q}</b></p><div class="ans">${esc(S.s6.risposte[i] || "(nessuna risposta)")}</div>`).join("")}`;
+  <h2>5. Progetto finale senza condensa</h2>${svgStrato(rf.L, {titolo: "Stratigrafia del progetto finale"})}
+  <p>U = ${fmt(rf.U, 3)} W/(m²K) (limite ${fmt(rf.lim, 3)}) · costo ${eur(rf.costo)} (budget ${eur(d.budget)}) · minima distanza p_s − p_v = ${fmt(rf.g.dmin, 0)} Pa.</p>
+  ${svgGlaser(rf.L, rf.g, "progetto finale")}${tabNodi(rf.L, rf.g)}${tabPreventivo(rf)}
+  <h2>6. Termografia simulata della sezione</h2>${svgTermo()}
+  <h2>7. Risposte alle domande</h2>${DOMANDE.map((q, i) => `<p><b>${i + 1}. ${q}</b></p><div class="ans">${esc(S.s7.risposte[i] || "(nessuna risposta)")}</div>`).join("")}`;
 }
 function stampa() {
   $("relazione").innerHTML = htmlRelazione(); document.body.classList.add("print-rel");
   setTimeout(() => { window.print(); document.body.classList.remove("print-rel"); }, 100);
 }
 function xlsRelazione() {
-  const d = D(), att = attesiS2(), r = S.s3.ultimo, L = stratiIsolati(), g = Calc.glaser(L, d.ti, d.fi, d.te, d.fe);
+  const d = D(), att = attesiS2(), r = S.s3.ultimo, L = stratiIsolati(), g = Calc.glaser(L, d.ti, d.fi, d.te, d.fe), rf = valuta(S.s6.prog || progV1());
   const wb = XLSX.utils.book_new(), add = (n, rows, cols) => { const ws = XLSX.utils.aoa_to_sheet(rows); if (cols) ws["!cols"] = cols.map(w => ({wch: w})); XLSX.utils.book_append_sheet(wb, ws, n); };
+  const nodi = (L, g) => [["Nodo", "x [cm]", "t [°C]", "p_s [Pa]", "p_v [Pa]", "p_s − p_v [Pa]"], ...g.t.map((t, k) => [k, +(g.x[k] * 100).toFixed(2), +t.toFixed(2), +g.ps[k].toFixed(0), +g.pv[k].toFixed(0), +g.d[k].toFixed(0)])];
   add("Dati", [["Progettista", S.gruppo.nomi], ["Località", d.loc], ["Zona", d.zona], ["t_i [°C]", d.ti], ["φ_i [%]", d.fi], ["t_e [°C]", d.te], ["φ_e [%]", d.fe], ["Budget [€]", d.budget],
-    ["A lorda [m²]", +att.Ag.toFixed(2)], ["A finestre e porte [m²]", +att.Af.toFixed(2)], ["A netta [m²]", +att.An.toFixed(2)], ["U iniziale", +att.U.toFixed(3)], ["Φ iniziale [W]", +att.Phi.toFixed(0)],
-    ["Invii con errori", S.s2.inviiTot - 1], ["Codici di sblocco usati", S.s2.sblocchi], ["Calcoli isolamento", S.s3.calcoli]], [28, 40]);
-  add("Isolamento", [["Strato", "s [m]", "λ", "π·10¹²"], ...L.map((l, i) => [`${i + 1}. ${l.nome}`, +l.s.toFixed(4), +l.lambda.toFixed(4), l.pi]), [], ["U prima", +r.U0.toFixed(3)], ["U dopo", +r.U.toFixed(3)], ["U limite", +r.lim.toFixed(3)], ["Φ prima [W]", +r.Phi0.toFixed(0)], ["Φ dopo [W]", +r.Phi.toFixed(0)], [],
-    ["Voce", "Quantità", "Unità", "€/u", "Totale €"], ...r.voci.map(v => [v.voce, +v.q.toFixed(2), v.u, +v.pu.toFixed(2), +v.tot.toFixed(2)]), ["Totale", "", "", "", +r.costo.toFixed(2)]], [60, 10, 10, 12, 12]);
-  add("Glaser (soluzione)", [["Nodo", "x [cm]", "t [°C]", "p_s [Pa]", "p_v [Pa]", "p_s − p_v [Pa]"], ...g.t.map((t, k) => [k, +(g.x[k] * 100).toFixed(2), +t.toFixed(2), +g.ps[k].toFixed(0), +g.pv[k].toFixed(0), +g.d[k].toFixed(0)]), [],
-    ["Risposta data", S.s5.risposta === "si" ? "condensa nello strato " + S.s5.strato : "nessuna condensa"], ["Esito", S.s5.esito]], [22, 10, 10, 10, 10, 14]);
-  add("Risposte", DOMANDE.map((q, i) => [`${i + 1}. ${q}`, S.s6.risposte[i] || ""]), [80, 100]);
+    ["A lorda [m²]", +att.Ag.toFixed(2)], ["A finestre e porte [m²]", +att.Af.toFixed(2)], ["A netta [m²]", +att.An.toFixed(2)], ["U iniziale", +att.U.toFixed(3)], ["Φ iniziale [W]", +att.Phi.toFixed(0)], [], ["Registro", registro()]], [28, 60]);
+  add("Prima versione", [["Strato", "s [m]", "λ", "π·10¹²"], ...L.map((l, i) => [`${i + 1}. ${l.nome}`, +l.s.toFixed(4), +l.lambda.toFixed(4), l.pi]), [], ["U", +r.U.toFixed(3)], ["U limite", +r.lim.toFixed(3)], ["Costo [€]", +r.costo.toFixed(0)], [],
+    ...nodi(L, g), [], ["Risposta data", S.s5.risposta ? (S.s5.risposta === "si" ? "condensa nello strato " + S.s5.strato : "nessuna condensa") : "—"], ["Esito", S.s5.esito]], [60, 10, 10, 12, 12, 14]);
+  add("Progetto finale", [["Strato", "s [m]", "λ", "π·10¹²"], ...rf.L.map((l, i) => [`${i + 1}. ${l.nome}`, +l.s.toFixed(4), +l.lambda.toFixed(4), l.pi]), [], ["U", +rf.U.toFixed(3)], ["U limite", +rf.lim.toFixed(3)], [],
+    ...nodi(rf.L, rf.g), [], ["Voce", "Quantità", "Unità", "€/u", "Totale €"], ...rf.voci.map(v => [v.voce, +v.q.toFixed(2), v.u, +v.pu.toFixed(2), +v.tot.toFixed(2)]), ["Totale", "", "", "", +rf.costo.toFixed(2)]], [60, 10, 10, 12, 12, 14]);
+  add("Risposte", DOMANDE.map((q, i) => [`${i + 1}. ${q}`, S.s7.risposte[i] || ""]), [80, 100]);
   XLSX.writeFile(wb, `${nomeFile()}_relazione.xlsx`);
+}
+
+// ---------------- sblocco docente per ogni sezione ----------------
+async function codiceValido(c) { return UNLOCK.includes(await Calc.sha256(String(c || "").trim().toUpperCase())); }
+function renderSblocchi() {
+  document.querySelectorAll(".sbl").forEach(box => {
+    const sez = +box.dataset.sez;
+    const fatto = [S.s1.ok, S.s2.ok, S.s3.ok, , S.s5.ok, S.s6.ok][sez - 1];
+    if (fatto) { box.innerHTML = ""; return; }
+    if (box.dataset.open) return;
+    box.innerHTML = `<details class="sblocco"><summary>Sblocco docente</summary>
+      <p class="msg">${{1: "Carica i dati di una scheda e prosegue.", 2: "Considera superata la verifica e prosegue.", 3: "Applica l'isolamento più economico che rispetta limite e budget e prosegue.", 5: "Salta la domanda e mostra la soluzione.", 6: "Applica il progetto più economico senza condensa e prosegue."}[sez]}</p>
+      ${sez === 1 ? `<label>Scheda <select class="sblScheda">${Object.keys(SCHEDE).map(n => `<option value="${n}">Scheda ${n} · ${SCHEDE[n].loc}</option>`).join("")}</select></label>` : ""}
+      <label>Codice <input class="sblCod" maxlength="6"></label> <button class="ghost small sblBtn">Sblocca e prosegui</button> <span class="msg sblMsg"></span></details>`;
+    box.querySelector("details").ontoggle = e => { box.dataset.open = e.target.open ? "1" : ""; };
+    box.querySelector(".sblBtn").onclick = async () => {
+      if (!(await codiceValido(box.querySelector(".sblCod").value))) { box.querySelector(".sblMsg").textContent = "Codice non valido."; return; }
+      S.sblocchi[sez] = (S.sblocchi[sez] || 0) + 1; box.dataset.open = "";
+      sbloccaSezione(sez, box.querySelector(".sblScheda") ? box.querySelector(".sblScheda").value : null);
+    };
+  });
+}
+function sbloccaSezione(sez, scheda) {
+  const d = () => D(), geo = () => Calc.geometria(D());
+  if (sez === 1) {
+    const sc = copia(SCHEDE[scheda]);
+    if (!S.gruppo.nomi.trim()) S.gruppo.nomi = `Scheda ${scheda}`;
+    S.dati = {...S.dati, ...sc}; S.s1.ok = true; riempiS1(); renderS2(); vai(2);
+  } else if (sez === 2) {
+    S.s2.ok = true; bloccaS1(true); renderS2(); initS3(); vai(3);
+  } else if (sez === 3) {
+    S.s3.prog = Calc.progDefault(stratiIniziali(), d(), geo(), false); calcolaS3(); S.s3.calcoli--; confermaS3();
+  } else if (sez === 5) {
+    S.s5 = {ok: true, risposta: null, strato: null, esito: "saltata (sblocco docente)"}; renderS5(); renderS6(); vai(6);
+  } else if (sez === 6) {
+    S.s6.prog = Calc.progDefault(stratiIniziali(), d(), geo(), true); renderS6(); confermaS6();
+  }
+  salvaLocale();
 }
 
 // ---------------- salvataggio ----------------
@@ -623,7 +737,7 @@ function scaricaJSON() {
 }
 function caricaJSON(file) {
   const rd = new FileReader();
-  rd.onload = () => { try { const o = JSON.parse(rd.result); if (o.v !== 3) throw 0; S = Object.assign(NUOVO(), o); renderTutto(); } catch (e) { alert("File non valido."); } };
+  rd.onload = () => { try { const o = JSON.parse(rd.result); if (o.v !== 4) throw 0; S = Object.assign(NUOVO(), o); renderTutto(); } catch (e) { alert("File non valido."); } };
   rd.readAsText(file);
 }
 function renderTutto() {
@@ -633,21 +747,32 @@ function renderTutto() {
   if (S.s3.ok) renderS4();
   if (S.s4.ok) renderS5();
   if (S.s5.ok) renderS6();
+  if (S.s6.ok) renderS7();
   aggiornaSteps(); salvaLocale();
 }
+function nuovoProgetto() { try { localStorage.removeItem("termoigro"); } catch (e) {} location.reload(); }
 
 // ---------------- avvio ----------------
 initS1();
-$("btnS2").onclick = inviaS2; $("btnCodice").onclick = sblocca;
-["iPos", "iIso", "iSp", "iFreno"].forEach(id => $(id).addEventListener("change", cambioS3));
+$("btnS2").onclick = inviaS2;
 $("btnCalcola").onclick = calcolaS3; $("btnS3").onclick = confermaS3;
 $("btnXlsParete").onclick = xlsParete;
 $("btnPngPianta").onclick = () => scaricaPNG(svgPianta(D()), `${nomeFile()}_pianta.png`);
 $("btnPngStrato").onclick = () => scaricaPNG(svgStrato(stratiIsolati(), {titolo: "Stratigrafia isolata"}), `${nomeFile()}_stratigrafia.png`);
 $("btnS4").onclick = () => { S.s4.ok = true; renderS5(); vai(5); };
-$("btnS5").onclick = inviaS5; $("btnS6").onclick = generaRelazione;
+$("btnS5").onclick = inviaS5; $("btnS6").onclick = confermaS6; $("btnS7").onclick = generaRelazione;
 $("btnSalva").onclick = scaricaJSON;
-$("btnNuovo").onclick = () => { if (confirm("Cancellare il lavoro presente in questo browser e iniziare un nuovo progetto? Salvate prima il progresso se vi serve.")) { try { localStorage.removeItem("termoigro"); } catch (e) {} location.reload(); } };
+$("btnNuovo").onclick = () => { if (confirm("Cancellare il lavoro presente in questo browser e iniziare un nuovo progetto? Salvate prima il progresso se vi serve.")) nuovoProgetto(); };
 $("fileCarica").onchange = e => e.target.files[0] && caricaJSON(e.target.files[0]);
-try { const o = JSON.parse(localStorage.getItem("termoigro")); if (o && o.v === 3) S = Object.assign(NUOVO(), o); } catch (e) {}
+let salvato = null;
+try { const o = JSON.parse(localStorage.getItem("termoigro")); if (o && o.v === 4) salvato = o; } catch (e) {}
+if (salvato && (salvato.gruppo.nomi || salvato.s1.ok)) {
+  // lavoro già presente in questo browser (PC condiviso?): si chiede se continuarlo
+  S = Object.assign(NUOVO(), salvato);
+  $("banner").classList.remove("hidden");
+  $("banner").innerHTML = `<span>In questo browser c'è un lavoro salvato${salvato.gruppo.nomi ? ` di <b>${esc(salvato.gruppo.nomi)}</b>` : ""}. È il vostro?</span>
+    <button class="primary small" id="bnContinua">Sì, continua</button><button class="ghost small" id="bnNuovo">No, nuovo progetto</button>`;
+  $("bnContinua").onclick = () => $("banner").classList.add("hidden");
+  $("bnNuovo").onclick = nuovoProgetto;
+}
 renderTutto();

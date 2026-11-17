@@ -124,6 +124,59 @@ const Calc = {
     return {voci, totale: voci.reduce((s, v) => s + v.tot, 0)};
   },
 
+
+  // ---- progetto a strati liberi: prog = {int: [...], est: [...]}, elemento {t:"iso", m, sp(cm)} oppure {t:"pe"}
+  // int: dal lato interno (vicino al cartongesso) verso la muratura; est: dalla muratura verso l'esterno
+  strato(it) {
+    if (it.t === "pe") { const p = ACCESSORI.pe; return {nome: p.nome, s: p.s, lambda: p.lambda, pi: p.pi, tipo: "acc"}; }
+    const m = ISOLANTI.find(x => x.id === it.m);
+    return {nome: `${m.nome} ${it.sp * 10} mm`, s: it.sp / 100, lambda: m.lambda, pi: m.pi, fpsi: m.fpsi, tipo: "iso"};
+  },
+  costruisci(base, prog) {
+    const L = [];
+    if (prog.int.length) { const c = ACCESSORI.cartongesso; L.push({nome: c.nome, s: c.s, lambda: c.lambda, pi: c.pi, tipo: "acc"}); }
+    prog.int.forEach(it => L.push(this.strato(it)));
+    L.push(...base);
+    prog.est.forEach(it => L.push(this.strato(it)));
+    if (prog.est.some(it => it.t === "iso")) { const r = ACCESSORI.rasatura; L.push({nome: r.nome, s: r.s, lambda: r.lambda, pi: r.pi, tipo: "acc"}); }
+    return L;
+  },
+  haEsterno(prog) { return prog.est.some(it => it.t === "iso"); },
+  uLimiteProg(zona, prog) { return U_LIMITE[zona] * (this.haEsterno(prog) ? 1 : MAGG_INTERNO); },
+  preventivoProg(prog, geo, h) {
+    const A = geo.An, voci = [];
+    for (const [lato, arr] of [["interno", prog.int], ["esterno", prog.est]]) for (const it of arr) {
+      if (it.t === "iso") { const m = ISOLANTI.find(x => x.id === it.m); voci.push({voce: `${m.nome} ${it.sp * 10} mm, lato ${lato} (materiale)`, q: A, u: "m²", pu: m.costoCm * it.sp}); }
+      else voci.push({voce: `Freno al vapore in PE 0,2 mm, lato ${lato} (posato)`, q: A, u: "m²", pu: COSTI.freno});
+    }
+    if (prog.int.length) voci.push({voce: "Posa interna: controparete in cartongesso su orditura metallica", q: A, u: "m²", pu: COSTI.posaInterna});
+    if (this.haEsterno(prog)) {
+      voci.push({voce: "Posa esterna a cappotto (collante, tasselli, rete, rasatura, finitura, manodopera)", q: A, u: "m²", pu: COSTI.posaEsterna});
+      voci.push({voce: "Ponteggio (facciata = perimetro × (h + 1 m), 2 mesi)", q: geo.P * (h + 1), u: "m²", pu: COSTI.ponteggio});
+    }
+    voci.forEach(v => v.tot = v.q * v.pu);
+    return {voci, totale: voci.reduce((s, v) => s + v.tot, 0)};
+  },
+  // valuta un progetto: U, limite, costo, Glaser
+  valuta(base, prog, d, geo) {
+    const L = this.costruisci(base, prog), g = this.glaser(L, d.ti, d.fi, d.te, d.fe), prev = this.preventivoProg(prog, geo, d.h);
+    const lim = this.uLimiteProg(d.zona, prog);
+    return {L, g, U: g.U, lim, costo: prev.totale, voci: prev.voci, okU: g.U <= lim + 1e-9, okB: prev.totale <= d.budget + 1e-6, okC: g.primo === null && g.dmin > 0};
+  },
+  // progetto di default per lo sblocco docente: il più economico che rispetta i vincoli richiesti
+  progDefault(base, d, geo, senzaCondensa) {
+    const cand = [];
+    for (const m of ISOLANTI) {
+      for (const sp of m.esterno) cand.push({int: [], est: [{t: "iso", m: m.id, sp}]});
+      for (const sp of m.interno) { cand.push({int: [{t: "iso", m: m.id, sp}], est: []}); cand.push({int: [{t: "pe"}, {t: "iso", m: m.id, sp}], est: []}); }
+    }
+    const ev = cand.map(p => ({p, r: this.valuta(base, p, d, geo)}));
+    const ok = ev.filter(e => e.r.okU && e.r.okB && (!senzaCondensa || e.r.okC));
+    const pool = ok.length ? ok : ev.filter(e => e.r.okU && (!senzaCondensa || e.r.okC));
+    pool.sort((a, b) => a.r.costo - b.r.costo);
+    return (pool[0] || ev[0]).p;
+  },
+
   uLimite(zona, pos) { return U_LIMITE[zona] * (pos === "interno" ? MAGG_INTERNO : 1); },
 
   async sha256(s) {

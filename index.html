@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Analisi termoigrometrica</title>
-<link rel="stylesheet" href="style.css">
-<script src="vendor/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="style.css?v=5">
+<script src="vendor/xlsx.full.min.js?v=5"></script>
 </head>
 <body>
 <header class="top">
@@ -20,6 +20,7 @@
   </div>
 </header>
 
+<div id="banner" class="banner hidden"></div>
 <nav id="steps" class="steps"></nav>
 
 <main>
@@ -65,6 +66,7 @@
     <button id="addStrato" class="ghost small">+ strato</button>
     <div id="svgStratoIniz" class="figure"></div>
     <div class="actions"><span id="s1msg" class="msg"></span><button id="btnS1" class="primary">Conferma i dati di progetto</button></div>
+    <div class="sbl" data-sez="1"></div>
   </section>
 
   <!-- 2 -->
@@ -86,29 +88,21 @@
           <label>Potenza dispersa Φ [W] <input id="vPhi" class="num"><span class="ck" id="ckPhi"></span></label>
         </div>
         <div class="actions"><span id="s2msg" class="msg"></span><button id="btnS2" class="primary">Invia i risultati</button></div>
-        <div id="sblocco" class="hidden notice warn">
-          <p><strong>Sezione bloccata dopo 5 invii con errori.</strong> Chiedete il codice di sblocco al docente.</p>
-          <label>Codice <input id="codice" maxlength="6"></label> <button id="btnCodice" class="ghost">Sblocca</button>
-        </div>
+        <div id="s2dati" class="hidden"></div>
       </div>
     </div>
     <div id="s2esito" class="hidden"></div>
+    <div class="sbl" data-sez="2"></div>
   </section>
 
   <!-- 3 -->
   <section id="s3" class="card locked">
     <h2><span class="num">3</span> Isolamento</h2>
-    <p class="hint">Una sola stratigrafia per tutte le pareti. Scegliete, poi premete <strong>Calcola</strong>: i risultati si aggiornano solo allora.</p>
+    <p class="hint">Una sola stratigrafia per tutte le pareti. Aggiungete gli strati all'interno e/o all'esterno della muratura esistente, poi premete <strong>Calcola</strong>: i risultati si aggiornano solo allora. Obiettivo: U sotto il limite di legge e costo nel budget.</p>
     <div class="two">
       <div>
-        <fieldset>
-          <legend>Scelta</legend>
-          <label>Posizione dell'isolante <select id="iPos"><option value="interno">Interno (controparete in cartongesso)</option><option value="esterno">Esterno (cappotto)</option></select></label>
-          <label>Isolante <select id="iIso"></select></label>
-          <label>Spessore [mm] <select id="iSp"></select></label>
-          <label id="lblFreno">Freno al vapore in PE <select id="iFreno"><option value="no">nessuno</option><option value="caldo">tra cartongesso e isolante</option><option value="freddo">tra isolante e muratura</option></select></label>
-        </fieldset>
-        <div id="alertPonteggio" class="notice warn hidden"></div>
+        <div id="editor3"></div>
+        <div id="alertPonteggio3" class="notice warn hidden"></div>
         <h3>Catalogo</h3>
         <div id="tabCatalogo"></div>
       </div>
@@ -118,6 +112,7 @@
       </div>
     </div>
     <div class="actions"><span id="s3msg" class="msg"></span><button id="btnS3" class="primary" disabled>Conferma l'isolamento</button></div>
+    <div class="sbl" data-sez="3"></div>
   </section>
 
   <!-- 4 -->
@@ -136,7 +131,7 @@
   <!-- 5 -->
   <section id="s5" class="card locked">
     <h2><span class="num">5</span> Verifica di condensa</h2>
-    <p class="hint">Un solo tentativo. Guardate il vostro diagramma di Glaser.</p>
+    <p class="hint">Un solo tentativo, sulla stratigrafia che avete scelto nella sezione 3. Guardate il vostro diagramma di Glaser.</p>
     <div id="domanda5">
       <p class="q">Nel vostro diagramma si forma condensa interstiziale?</p>
       <div class="radio">
@@ -149,22 +144,46 @@
       <div class="actions"><button id="btnS5" class="primary">Invia la risposta (1 tentativo)</button></div>
     </div>
     <div id="soluzione5" class="hidden"></div>
+    <div class="sbl" data-sez="5"></div>
   </section>
 
   <!-- 6 -->
   <section id="s6" class="card locked">
-    <h2><span class="num">6</span> Domande e relazione</h2>
+    <h2><span class="num">6</span> Progetto senza condensa</h2>
+    <p class="hint">Modificate la stratigrafia: temperature, pressioni e diagramma di Glaser si aggiornano a ogni modifica. Per confermare servono tre condizioni: U sotto il limite, costo nel budget, nessuna condensa interstiziale.</p>
+    <div class="two">
+      <div>
+        <div id="editor6"></div>
+        <div id="alertPonteggio6" class="notice warn hidden"></div>
+        <div id="kpi6"></div>
+      </div>
+      <div>
+        <div id="strato6" class="figure"></div>
+      </div>
+    </div>
+    <div id="glaser6" class="figure"></div>
+    <div id="nodi6"></div>
+    <div class="actions"><span id="s6msg" class="msg"></span><button id="btnS6" class="primary" disabled>Conferma il progetto</button></div>
+    <div class="sbl" data-sez="6"></div>
+  </section>
+
+  <!-- 7 -->
+  <section id="s7" class="card locked">
+    <h2><span class="num">7</span> Termografie, domande e relazione</h2>
+    <h3>Termografia simulata della sezione</h3>
+    <div id="termoBox" class="figure"></div>
     <p class="hint">Rispondete citando i vostri numeri. Le risposte entrano nella relazione.</p>
-    <div id="domande6"></div>
-    <div class="actions"><button id="btnS6" class="primary">Genera la relazione</button></div>
-    <div id="approf6" class="hidden"></div>
+    <div id="domande7"></div>
+    <div class="actions"><button id="btnS7" class="primary">Genera la relazione</button></div>
+    <div id="approf7" class="hidden"></div>
   </section>
 </main>
 
 <div id="relazione" class="hidden"></div>
 <footer class="foot">Dati: manuale in uso (λ, π, Rsi, Rse), Prezzario Regione FVG 2025, DM 28/10/2025. Calcolo stazionario semplificato a scopo didattico.</footer>
-<script src="data.js"></script>
-<script src="calc.js"></script>
-<script src="app.js"></script>
+<script src="data.js?v=5"></script>
+<script src="schede.js?v=5"></script>
+<script src="calc.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
