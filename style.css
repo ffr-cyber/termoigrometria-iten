@@ -125,3 +125,14 @@ svg .layer:hover { opacity: .8; cursor: pointer; }
 .banner { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 24px; background: var(--warn-soft); border-bottom: 1px solid #f1c27d; }
 details summary { cursor: pointer; margin: 8px 0; }
 #termoBox svg, #relazione svg[viewBox="0 0 540 860"] { max-width: 640px; margin: 0 auto; }
+/* telefono */
+@media (max-width: 640px) {
+  main { padding: 8px; } .card { padding: 14px 12px; } .top, .steps { padding-left: 12px; padding-right: 12px; }
+  table { display: block; overflow-x: auto; white-space: nowrap; max-width: 100%; }
+  .erow { grid-template-columns: 1fr auto; } .erow > select:first-child { grid-column: 1 / -1; }
+  .verify label { grid-template-columns: 1fr 110px 24px; }
+  .row4 { grid-template-columns: repeat(2, 1fr); }
+  .kpi { grid-template-columns: 1fr 1fr; }
+  .bar .marklbl { font-size: 11px; }
+}
+html, body { overflow-x: hidden; }
