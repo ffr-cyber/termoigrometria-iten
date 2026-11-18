@@ -136,3 +136,9 @@ details summary { cursor: pointer; margin: 8px 0; }
   .bar .marklbl { font-size: 11px; }
 }
 html, body { overflow-x: hidden; }
+
+#docente { padding: 12px 24px; background: #e2f1ef; border-bottom: 1px solid #9fd0ca; }
+.docbox { max-width: 760px; margin: 0 auto; }
+.docbox h3 { margin-top: 0; }
+.docbox label { display: block; max-width: 520px; }
+.docbox #docStep1 label { display: inline-block; max-width: 200px; }

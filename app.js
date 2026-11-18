@@ -505,13 +505,16 @@ function renderEditor3() {
   if (S.s3.ok) { cont.querySelectorAll("select,button").forEach(e => e.disabled = true); return; }
   collegaEditor(cont, () => S.s3.prog, p => { S.s3.prog = p; renderEditor3(); $("btnS3").disabled = true; $("s3msg").className = "msg"; $("s3msg").textContent = "Stratigrafia cambiata: premete Calcola."; salvaLocale(); }, "e3");
 }
+function ultimoDa(p) {
+  const r = valuta(p), d = D(), geo = Calc.geometria(d), g0 = Calc.glaser(stratiIniziali(), d.ti, d.fi, d.te, d.fe);
+  return {prog: copia(p), U: r.U, U0: g0.U, lim: r.lim, costo: r.costo, voci: r.voci, okU: r.okU, okB: r.okB, ok: r.okU && r.okB,
+    Phi: r.U * geo.An * (d.ti - d.te), Phi0: g0.U * geo.An * (d.ti - d.te)};
+}
 function calcolaS3() {
   const p = S.s3.prog;
   if (!p.int.some(it => it.t === "iso") && !p.est.some(it => it.t === "iso")) { $("s3msg").className = "msg bad"; $("s3msg").textContent = "Aggiungete almeno un isolante."; return; }
   S.s3.calcoli++;
-  const r = valuta(p), d = D(), geo = Calc.geometria(d), g0 = Calc.glaser(stratiIniziali(), d.ti, d.fi, d.te, d.fe);
-  S.s3.ultimo = {prog: copia(p), U: r.U, U0: g0.U, lim: r.lim, costo: r.costo, voci: r.voci, okU: r.okU, okB: r.okB, ok: r.okU && r.okB,
-    Phi: r.U * geo.An * (d.ti - d.te), Phi0: g0.U * geo.An * (d.ti - d.te)};
+  S.s3.ultimo = ultimoDa(p);
   mostraRisultati3(S.s3.ultimo); salvaLocale();
 }
 function mostraRisultati3(r) {
@@ -729,6 +732,44 @@ function sbloccaSezione(sez, scheda) {
   salvaLocale();
 }
 
+
+// ---------------- accesso docente: scheda + sezione di partenza, tutto precompilato ----------------
+// isolamento di partenza per la sezione 3: lana di vetro interna senza freno (rispetta U e budget ma di solito fa condensa)
+function progPartenza() {
+  const lv = ISOLANTI.find(m => m.id === "lanavetro");
+  for (const sp of lv.interno) { const p = {int: [{t: "iso", m: "lanavetro", sp}], est: []}, r = valuta(p); if (r.okU && r.okB) return p; }
+  const d = D(); return Calc.progDefault(stratiIniziali(), d, Calc.geometria(d), false);
+}
+function avviaDocente(n, sez) {
+  const nome = S.gruppo.nomi;
+  S = NUOVO(); S.gruppo.nomi = nome || `Scheda ${n}`;
+  S.dati = {...S.dati, ...copia(SCHEDE[n])};
+  S.sblocchi.docente = `scheda ${n}, partenza dalla sezione ${sez}`;
+  if (sez > 1) S.s1.ok = true;
+  if (sez > 2) { const a = attesiS2(); S.s2.ok = true; S.s2.valori = {Ag: fmt(a.Ag, 2), Af: fmt(a.Af, 2), An: fmt(a.An, 2), U: fmt(a.U, 3), Phi: fmt(a.Phi, 0)}; }
+  if (sez > 3) { S.s3.prog = progPartenza(); S.s3.ultimo = ultimoDa(S.s3.prog); S.s3.ok = true; S.s6.prog = copia(S.s3.prog); }
+  if (sez > 4) S.s4.ok = true;
+  if (sez > 5) S.s5 = {ok: true, risposta: null, strato: null, esito: "saltata (accesso docente)"};
+  if (sez > 6) { const d = D(); S.s6.prog = Calc.progDefault(stratiIniziali(), d, Calc.geometria(d), true); S.s6.ok = true; }
+  S.pagina = sez;
+  $("docente").classList.add("hidden"); $("banner").classList.add("hidden");
+  renderTutto(); window.scrollTo(0, 0);
+}
+function apriDocente() {
+  const box = $("docente"); box.classList.remove("hidden");
+  box.innerHTML = `<div class="docbox"><h3>Accesso docente</h3>
+    <div id="docStep1"><label>Codice <input id="docCod" maxlength="6"></label> <button class="primary small" id="docOk">Entra</button> <span id="docMsg" class="msg"></span></div>
+    <div id="docStep2" class="hidden">
+      <label>Caso studio <select id="docScheda">${Object.keys(SCHEDE).map(n => `<option value="${n}">Scheda ${n} · ${SCHEDE[n].loc} · pianta ${({R: "rettangolare", L: "a L", U: "a U"})[SCHEDE[n].tipo]}</option>`).join("")}</select></label>
+      <label>Sezione da cui continuare <select id="docSez">${SEZ.map((s, i) => `<option value="${i + 1}" ${i === 5 ? "selected" : ""}>${i + 1}. ${s}</option>`).join("")}</select></label>
+      <p class="msg">Le sezioni precedenti vengono completate in automatico con i dati della scheda; nella sezione 3 viene messa lana di vetro interna senza freno al vapore (rispetta U e budget, ma fa condensa). Il lavoro presente in questo browser viene sostituito.</p>
+      <button class="primary" id="docVai">Avvia</button></div>
+    <button class="ghost small" id="docChiudi">Chiudi</button></div>`;
+  $("docChiudi").onclick = () => box.classList.add("hidden");
+  $("docOk").onclick = async () => { if (await codiceValido($("docCod").value)) { $("docStep1").classList.add("hidden"); $("docStep2").classList.remove("hidden"); } else $("docMsg").textContent = "Codice non valido."; };
+  $("docVai").onclick = () => avviaDocente($("docScheda").value, +$("docSez").value);
+}
+
 // ---------------- salvataggio ----------------
 function scaricaJSON() {
   const a = document.createElement("a");
@@ -761,7 +802,7 @@ $("btnPngPianta").onclick = () => scaricaPNG(svgPianta(D()), `${nomeFile()}_pian
 $("btnPngStrato").onclick = () => scaricaPNG(svgStrato(stratiIsolati(), {titolo: "Stratigrafia isolata"}), `${nomeFile()}_stratigrafia.png`);
 $("btnS4").onclick = () => { S.s4.ok = true; renderS5(); vai(5); };
 $("btnS5").onclick = inviaS5; $("btnS6").onclick = confermaS6; $("btnS7").onclick = generaRelazione;
-$("btnSalva").onclick = scaricaJSON;
+$("btnSalva").onclick = scaricaJSON; $("btnDocente").onclick = apriDocente;
 $("btnNuovo").onclick = () => { if (confirm("Cancellare il lavoro presente in questo browser e iniziare un nuovo progetto? Salvate prima il progresso se vi serve.")) nuovoProgetto(); };
 $("fileCarica").onchange = e => e.target.files[0] && caricaJSON(e.target.files[0]);
 let salvato = null;

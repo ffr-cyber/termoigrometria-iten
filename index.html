@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Analisi termoigrometrica</title>
-<link rel="stylesheet" href="style.css?v=6">
-<script src="vendor/xlsx.full.min.js?v=6"></script>
+<link rel="stylesheet" href="style.css?v=7">
+<script src="vendor/xlsx.full.min.js?v=7"></script>
 </head>
 <body>
 <header class="top">
@@ -16,11 +16,13 @@
   <div class="saveload">
     <button id="btnSalva" class="ghost">Salva progresso (.json)</button>
     <button id="btnNuovo" class="ghost">Nuovo progetto</button>
+    <button id="btnDocente" class="ghost">Accesso docente</button>
     <label class="ghost filebtn">Carica progresso<input type="file" id="fileCarica" accept=".json,application/json"></label>
   </div>
 </header>
 
 <div id="banner" class="banner hidden"></div>
+<div id="docente" class="hidden"></div>
 <nav id="steps" class="steps"></nav>
 
 <main>
@@ -181,9 +183,9 @@
 
 <div id="relazione" class="hidden"></div>
 <footer class="foot">Dati: manuale in uso (λ, π, Rsi, Rse), Prezzario Regione FVG 2025, DM 28/10/2025. Calcolo stazionario semplificato a scopo didattico.</footer>
-<script src="data.js?v=6"></script>
-<script src="schede.js?v=6"></script>
-<script src="calc.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="data.js?v=7"></script>
+<script src="schede.js?v=7"></script>
+<script src="calc.js?v=7"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>
